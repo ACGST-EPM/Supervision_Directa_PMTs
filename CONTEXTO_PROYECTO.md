@@ -218,7 +218,45 @@ Rutinarios). El equivalente completo para Implementación/PO todavía no está m
 internos de SharePoint — sigue pendiente el descubrimiento descrito en la sección 6, pero los
 NOMBRES LIMPIOS y sus PESOS de esta tabla sí son definitivos y no deben cambiar.
 
-## 9. Convenciones acordadas
+## 10. Fotos de evidencia fotográfica (decisión en curso, con interruptor)
+
+Las listas de SharePoint incluyen **adjuntos nativos** (fotos tomadas desde el formulario de
+PowerApps) — confirmado: `crudo_rutinarios.json` solo trae la bandera `{HasAttachments}`, no
+una columna de tipo Imagen/Hipervínculo. Obtener las fotos requiere pasos adicionales en
+Power Automate (`Obtener adjuntos` + `Obtener contenido de adjunto` por ítem) que **todavía no
+están diseñados** — pendiente para la Fase 4/6.
+
+**Se probó la alternativa de enlazar directo a la URL de SharePoint** (sin copiar la foto al
+repo): funciona para empleados EPM que ya tienen acceso a la lista, pero pide permiso a
+empleados sin acceso directo y pide inicio de sesión a externos. Se descartó por fricción —
+el objetivo es que cualquiera con el link del tablero vea las fotos sin trámites adicionales.
+
+**Decisión:** proceder a copiar las fotos al repositorio (mismo patrón que los JSON), con un
+**interruptor de dos capas independientes**, porque la política de privacidad de EPM sobre
+estas fotos aún no está definida:
+
+1. **Capa de interfaz** (`MOSTRAR_FOTOS` en `config.js`, nuevo archivo de solo interruptores
+   de funciones): controla si el tablero *muestra* fotos. Instantáneo, sin tocar Power
+   Automate. **No hace privadas las fotos que ya estén en el repo** — solo deja de
+   desplegarlas en pantalla.
+2. **Capa de tubería** (en el flujo de Power Automate, pendiente de diseñar en la Fase 4/6):
+   controla si las fotos *se siguen copiando* al repo público de ahí en adelante. Esta es la
+   que de verdad resuelve el tema de privacidad. Si la política resulta ser "no pueden ser
+   públicas", apagar solo la Capa 1 NO es suficiente — hay que apagar también la Capa 2 y
+   limpiar lo ya subido (reescribir historial de Git, igual que se documentó para los datos
+   personales en la sección 2).
+
+**Contrato de datos para el front-end** (no depende de cómo Power Automate las entregue):
+cada registro puede traer `fotos: ["ruta/relativa1.jpg", ...]` — lista vacía o ausente si no
+hay fotos. Se muestran como miniaturas dentro del detalle de cada registro (no en una galería
+aparte), para heredar automáticamente los filtros activos sin lógica adicional.
+
+**Pendiente técnico para la Fase 4/6:** las fotos de cámara/PowerApps suelen pesar 1-5 MB; la
+API de contenido de GitHub usada para los JSON tiene un límite práctico cercano a 1 MB por
+archivo en una sola operación — probablemente se necesite comprimir/redimensionar en Power
+Automate antes de subir, o usar una API distinta de GitHub para archivos grandes.
+
+## 11. Convenciones acordadas
 
 - Nombres de archivo: minúsculas, sin tildes, sin espacios (evita romper GitHub Pages, que
   es case-sensitive, a diferencia de Windows).
