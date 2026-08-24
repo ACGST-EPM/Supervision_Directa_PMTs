@@ -1,0 +1,277 @@
+/* styles.css — Tablero de Seguimiento PMTs */
+
+:root {
+  --color-fondo: #f4f6f8;
+  --color-superficie: #ffffff;
+  --color-borde: #d8dee4;
+  --color-texto: #1f2933;
+  --color-texto-suave: #52606d;
+  --color-primario: #1b4b91;
+  --color-primario-oscuro: #123566;
+
+  --color-verde: #2e7d32;
+  --color-verde-fondo: #e6f4e8;
+  --color-amarillo: #a5720a;
+  --color-amarillo-fondo: #fdf1da;
+  --color-rojo: #c62828;
+  --color-rojo-fondo: #fbe4e4;
+  --color-sin-dato: #52606d;
+  --color-sin-dato-fondo: #e4e7eb;
+
+  --radio: 8px;
+  --sombra: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--color-fondo);
+  color: var(--color-texto);
+  line-height: 1.4;
+}
+
+header.cabecera {
+  background: var(--color-primario);
+  color: #ffffff;
+  padding: 20px 24px;
+}
+header.cabecera h1 { margin: 0 0 4px; font-size: 1.4rem; }
+header.cabecera p { margin: 0; color: #dbe6f5; font-size: 0.9rem; }
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 16px 60px;
+}
+
+section { margin-bottom: 28px; }
+
+h2 {
+  font-size: 1.05rem;
+  color: var(--color-primario-oscuro);
+  margin: 0 0 12px;
+  border-bottom: 2px solid var(--color-borde);
+  padding-bottom: 6px;
+}
+
+/* --- Resumen / KPIs --- */
+.resumen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.tarjeta-kpi {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  padding: 14px 16px;
+  box-shadow: var(--sombra);
+}
+.tarjeta-kpi .valor { font-size: 1.6rem; font-weight: 700; }
+.tarjeta-kpi .etiqueta { font-size: 0.8rem; color: var(--color-texto-suave); }
+.tarjeta-kpi.verde .valor { color: var(--color-verde); }
+.tarjeta-kpi.amarillo .valor { color: var(--color-amarillo); }
+.tarjeta-kpi.rojo .valor { color: var(--color-rojo); }
+
+/* --- Filtros --- */
+.filtros {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  box-shadow: var(--sombra);
+}
+.campo-filtro { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; }
+.campo-filtro label { color: var(--color-texto-suave); }
+.campo-filtro select,
+.campo-filtro input {
+  padding: 6px 8px;
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  min-width: 150px;
+}
+.campo-filtro.texto input { min-width: 220px; }
+#btn-limpiar-filtros {
+  padding: 7px 14px;
+  border: 1px solid var(--color-primario);
+  color: var(--color-primario);
+  background: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+#btn-limpiar-filtros:hover { background: #eef3fa; }
+
+/* --- Gráfico de barras (por contrato) --- */
+.grafico-contratos {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  padding: 14px 16px;
+  box-shadow: var(--sombra);
+}
+.barra-contrato {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 0.85rem;
+}
+.barra-etiqueta { color: var(--color-texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-fondo {
+  background: #eef1f4;
+  border-radius: 6px;
+  height: 14px;
+  overflow: hidden;
+}
+.barra-relleno { height: 100%; border-radius: 6px; }
+.barra-valor { text-align: right; font-weight: 600; }
+.sin-datos { color: var(--color-texto-suave); font-size: 0.88rem; padding: 8px 0; }
+
+/* --- Tabla --- */
+.tabla-contenedor {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  overflow-x: auto;
+  box-shadow: var(--sombra);
+}
+table.tabla-registros {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  min-width: 820px;
+}
+table.tabla-registros thead th {
+  position: sticky;
+  top: 0;
+  background: #eef1f6;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--color-borde);
+  white-space: nowrap;
+}
+table.tabla-registros tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-borde);
+  vertical-align: top;
+}
+table.tabla-registros tbody tr.fila-registro { cursor: pointer; }
+table.tabla-registros tbody tr.fila-registro:hover { background: #f7f9fb; }
+table.tabla-registros tbody tr.fila-detalle td {
+  background: #fafbfc;
+  padding: 0 12px 16px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.badge.verde { background: var(--color-verde-fondo); color: var(--color-verde); }
+.badge.amarillo { background: var(--color-amarillo-fondo); color: var(--color-amarillo); }
+.badge.rojo { background: var(--color-rojo-fondo); color: var(--color-rojo); }
+.badge.sin_dato { background: var(--color-sin-dato-fondo); color: var(--color-sin-dato); }
+
+.badge-tipo {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #e3eaf4;
+  color: var(--color-primario-oscuro);
+}
+
+.icono-expandir { color: var(--color-texto-suave); font-size: 0.75rem; }
+
+/* --- Detalle expandido --- */
+.detalle-registro {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 20px;
+  padding-top: 12px;
+}
+.detalle-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+  padding: 3px 0;
+  border-bottom: 1px dashed #e2e6ea;
+}
+.detalle-item .etq { color: var(--color-texto-suave); }
+.detalle-item .val { font-weight: 600; }
+.detalle-observaciones {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-borde);
+}
+.detalle-observaciones .etq { display: block; color: var(--color-texto-suave); margin-bottom: 2px; }
+
+.fotos-evidencia { grid-column: 1 / -1; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--color-borde); }
+.fotos-evidencia h4 { margin: 0 0 8px; font-size: 0.85rem; color: var(--color-texto-suave); }
+.galeria-miniaturas { display: flex; flex-wrap: wrap; gap: 8px; }
+.foto-miniatura {
+  width: 90px;
+  height: 68px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--color-borde);
+  cursor: zoom-in;
+}
+
+/* --- Lightbox --- */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+.lightbox-overlay[hidden] { display: none; }
+.lightbox-overlay img {
+  max-width: 90vw;
+  max-height: 85vh;
+  border-radius: 6px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+.lightbox-cerrar {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 1.8rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+footer.pie {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px 30px;
+  color: var(--color-texto-suave);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 640px) {
+  table.tabla-registros { min-width: 680px; }
+  .barra-contrato { grid-template-columns: 100px 1fr 40px; }
+}

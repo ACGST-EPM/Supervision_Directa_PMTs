@@ -1,10 +1,116 @@
-<!-- Archivo de prueba: solo confirma que Replit sirve HTML correctamente. 
-     Lo vamos a reemplazar por el tablero real en el siguiente paso. -->
 <!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"><title>Prueba</title></head>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero de Seguimiento PMTs</title>
+<link rel="stylesheet" href="styles.css">
+</head>
 <body>
-  <h1>Si ves esto, la vista previa funciona</h1>
-  <h1>Segundo ensayo</h1>
+
+<header class="cabecera">
+  <h1>Tablero de Seguimiento PMTs</h1>
+  <p>Cumplimiento de Planes de Manejo de Tránsito — Rutinarios y Puesta en Operación (PO)</p>
+</header>
+
+<main>
+
+  <section id="seccion-resumen" aria-label="Resumen">
+    <h2>Resumen</h2>
+    <div class="resumen-grid" id="resumen-grid">
+      <!-- tarjetas KPI generadas por app.js -->
+    </div>
+  </section>
+
+  <section id="seccion-filtros" aria-label="Filtros">
+    <h2>Filtros</h2>
+    <div class="filtros">
+      <div class="campo-filtro">
+        <label for="filtro-tipo">Tipo de registro</label>
+        <select id="filtro-tipo">
+          <option value="todos">Todos</option>
+          <option value="rutinario">Rutinarios</option>
+          <option value="po">Puesta en Operación (PO)</option>
+        </select>
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-contrato">Contrato</label>
+        <select id="filtro-contrato">
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-semaforo">Semáforo</label>
+        <select id="filtro-semaforo">
+          <option value="todos">Todos</option>
+          <option value="verde">Verde (cumple)</option>
+          <option value="amarillo">Amarillo (por mejorar)</option>
+          <option value="rojo">Rojo (crítico)</option>
+          <option value="sin_dato">Sin dato</option>
+        </select>
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-desde">Desde</label>
+        <input type="date" id="filtro-desde">
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-hasta">Hasta</label>
+        <input type="date" id="filtro-hasta">
+      </div>
+      <div class="campo-filtro texto">
+        <label for="filtro-texto">Buscar (dirección, observaciones, diligenciado por)</label>
+        <input type="text" id="filtro-texto" placeholder="Ej. Envigado, señalización...">
+      </div>
+      <button type="button" id="btn-limpiar-filtros">Limpiar filtros</button>
+    </div>
+  </section>
+
+  <section id="seccion-grafico" aria-label="Puntaje promedio por contrato">
+    <h2>Puntaje promedio por contrato</h2>
+    <div class="grafico-contratos" id="grafico-contratos">
+      <!-- barras generadas por app.js -->
+    </div>
+  </section>
+
+  <section id="seccion-tabla" aria-label="Registros">
+    <h2>Registros</h2>
+    <div class="tabla-contenedor">
+      <table class="tabla-registros">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Contrato</th>
+            <th>Proyecto</th>
+            <th>Contratista</th>
+            <th>Dirección</th>
+            <th>Puntaje</th>
+            <th>Semáforo</th>
+          </tr>
+        </thead>
+        <tbody id="cuerpo-tabla">
+          <!-- filas generadas por app.js -->
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer class="pie">
+  <p id="fuente-datos">Cargando datos...</p>
+  <p>Umbrales: verde ≥ 80, amarillo entre 71 y 79, rojo ≤ 70. Los registros con "No aplica" no descuentan puntaje; los campos vacíos no se cuentan.</p>
+</footer>
+
+<div class="lightbox-overlay" id="lightbox" hidden>
+  <button type="button" class="lightbox-cerrar" id="lightbox-cerrar" aria-label="Cerrar">&times;</button>
+  <img id="lightbox-img" src="" alt="Foto de evidencia ampliada">
+</div>
+
+<!-- Scripts clásicos (sin type="module"), en orden de dependencia: -->
+<script src="config.js"></script>
+<script src="modelo.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
