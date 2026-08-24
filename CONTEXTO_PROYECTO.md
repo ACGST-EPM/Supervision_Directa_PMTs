@@ -74,8 +74,16 @@ GetSHA / ContenidoImp(base64 de Seleccionar) / ShaImp / PutArchivo  (Implementac
 
 **Nombres internos de SharePoint — Rutinarios (verificados directamente sobre datos reales):**
 
+**Corrección post-revisión de código (`app.js`, verificado contra lo que construyó Claude
+Code):** el tablero necesita un identificador único por registro (`id`) para rastrear qué fila
+está expandida — sin él, con más de un registro real todas las filas comparten el mismo `id`
+vacío y expandir una fila expande/colapsa todas a la vez. No estaba en el mapeo original; se
+agrega abajo como primera fila. Aplica igual para el Select de Implementación cuando se
+construya — nunca omitir este campo ahí tampoco.
+
 | Clave limpia nueva | Nombre interno SharePoint |
 |---|---|
+| id | `ID` |
 | fecha | `Fecha` |
 | contrato | `Contrato` → `.Value` |
 | diligenciado_por | `Diligenciadopor` |
