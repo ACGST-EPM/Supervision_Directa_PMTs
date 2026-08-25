@@ -86,6 +86,7 @@ construya — nunca omitir este campo ahí tampoco.
 | id | `ID` |
 | fecha | `Fecha` |
 | contrato | `Contrato` → `.Value` |
+| frente | `Seguimiento` → `.Value` |
 | diligenciado_por | `Diligenciadopor` |
 | direccion | `Direcci_x00f3_n` |
 | tipo_cierre | `Tipodecierre` → `.Value` |
@@ -101,10 +102,10 @@ construya — nunca omitir este campo ahí tampoco.
 | platinas_pernadas | `Platinas_x003a_pernadas_x002c_an` → `.Value` |
 | via_despejada | `V_x00ed_adespejada` → `.Value` |
 
-**PENDIENTE:** nombres internos de Implementación (17 ítems del checklist de PO). Método
-acordado para obtenerlos: crear el flujo con solo las dos acciones "Obtener elementos",
-ejecutar prueba manual, e inspeccionar el output crudo de "Obtener elementos" de
-Implementación en el historial de ejecución — sin necesidad de escribir nada a GitHub todavía.
+**RESUELTO:** el mapeo completo de Implementación (17 ítems del checklist PO, más la
+estructura DG/PO y el algoritmo de fusión) está documentado completo en la sección 9 — ya no
+es un pendiente. Rutinarios NO tiene la estructura de dos tarjetas DG/PO — es un único
+formulario, sin necesidad de fusión.
 
 **Validación obligatoria antes de activar la recurrencia:** los pesos de los ítems
 seleccionados en Implementación deben sumar exactamente 1.00 (100%). Si no suman, hay un
@@ -226,6 +227,104 @@ Rutinarios). El equivalente completo para Implementación/PO todavía no está m
 internos de SharePoint — sigue pendiente el descubrimiento descrito en la sección 6, pero los
 NOMBRES LIMPIOS y sus PESOS de esta tabla sí son definitivos y no deben cambiar.
 
+## 9. Implementación (PO): estructura real, mapeo completo, fusión DG/PO y duplicados
+
+**Descubrimiento estructural clave:** la lista SharePoint "Plan Seguimiento PMT -
+Implementacion" recibe datos del PowerApp mediante **dos tarjetas separadas dentro del mismo
+formulario**: una de "Datos Generales" (DG: contrato, frente, fecha, clima, diligenciado por,
+dirección, tipo de cierre) y otra de "Previo a Obras" (PO: checklist de 17 ítems que sí se
+puntúa). **Cada tarjeta crea su PROPIA fila en la lista, con su propio `ID` de SharePoint** —
+no son la misma fila. Para saber qué fila DG corresponde a qué fila PO, ambas tarjetas piden
+de nuevo contrato, frente y fecha, y esa combinación (`contrato+frente+fecha`) es la clave de
+cruce. La fusión de estas dos filas en un solo registro completo se hace en `app.js`, NO en
+Power Automate (más fácil de depurar y corregir ahí que dentro de un flujo).
+
+**Nombre interno confirmado del campo Frente:**
+- Rutinarios: columna visible "Frentes", nombre interno `Seguimiento`.
+- Implementación, lado DG: nombre interno `Seguimiento` (mismo patrón, sin sufijo).
+- Implementación, lado PO: nombre interno `Seguimiento_x0028_PO_x0029_` (columna visible hoy
+  dice "Frente (PO)", pero originalmente se creó con otro nombre — el interno no cambió).
+
+**Mapeo completo de campos — Implementación (verificado sobre datos reales, sin suposiciones
+pendientes):**
+
+| Clave limpia | Nombre interno SharePoint | Lado |
+|---|---|---|
+| id | `ID` | — |
+| contrato_dg | `Contrato` → `.Value` | DG (clave de cruce) |
+| frente_dg | `Seguimiento` → `.Value` | DG (clave de cruce) |
+| fecha_dg | `Fecha` | DG (clave de cruce) |
+| diligenciado_por | `Diligenciadopor` → `.Value` | DG (solo existe ahí) |
+| direccion | `Direcci_x00f3_n` | DG (solo existe ahí) |
+| tipo_cierre | `Tipodecierre` → `.Value` | DG (solo existe ahí) |
+| contrato_po | `Contrato_x0028_DO_x0029_` → `.Value` | PO (clave de cruce; nombre interno heredado de un renombre) |
+| frente_po | `Seguimiento_x0028_PO_x0029_` → `.Value` | PO (clave de cruce) |
+| fecha_po | `Fecha_x0028_PO_x0029_` | PO (clave de cruce) |
+| observaciones | `Observacionesgenerales` | PO |
+| pmt_impreso | `PlandeManejodeTr_x00e1_nsito` → `.Value` | PO |
+| horario_inicio | `Inicioenhoraautorizada` → `.Value` | PO |
+| reposicion_senales | `Reposici_x00f3_ndese_x00f1_ales` → `.Value` | PO |
+| senalizacion_segun_planos | `Se_x00f1_alizaci_x00f3_nVertical` → `.Value` | PO |
+| espaciamiento_senales | `Se_x00f1_alizaci_x00f3_nvertical0` → `.Value` | PO |
+| tamano_senales | `Se_x00f1_alizaci_x00f3_nvertical1` → `.Value` | PO |
+| canalizacion_sentido_flujo | `Canalizaci_x00f3_n_x002d_Ensenti` → `.Value` | PO |
+| canalizacion_segun_planos | `Canalizaci_x00f3_n_x002d_Ubicaci` → `.Value` | PO |
+| canalizacion_lastrada | `Hola` → `.Value` (nombre interno real, verificado — ver nota abajo) | PO |
+| canalizacion_reflectividad | `Canalizaci_x00f3_n_x002d_Element` → `.Value` | PO |
+| ancho_carril | `Gesti_x00f3_ncierrevial_x002d_An` → `.Value` | PO |
+| longitud_transicion | `Gesti_x00f3_ncierrevial_x002d_Lo` → `.Value` | PO |
+| longitud_seguridad | `Gesti_x00f3_ncierrevial_x002d_Lo0` → `.Value` | PO |
+| area_acopio | `Gesti_x00f3_ncierrevial_x002d__x` → `.Value` | PO |
+| flashers | `Gesti_x00f3_ncierrevial_x002d_Fl` → `.Value` | PO |
+| auxiliares_cantidad | `Gesti_x00f3_nauxiliatesdetr_x00e` → `.Value` (ojo: la variante mal escrita "auxiliaTES", verificada — la correctamente escrita "auxiliaRES" NO es esta) | PO |
+| auxiliares_baston | `Gesti_x00f3_nauxiliaresdetr_x00e1` → `.Value` | PO |
+
+**Nota histórica sobre `Hola`:** en la primera revisión del código original se diagnosticó como
+un placeholder olvidado (bug). Se corrigió esa conclusión con evidencia directa: el campo
+`Hola` es un nombre interno real (probablemente la columna se creó originalmente con ese
+nombre de prueba y luego se le cambió el nombre visible, sin que el nombre interno cambiara —
+el mismo fenómeno visto en otras columnas). Confirmado cruzando el valor de `Hola` con el
+texto de `Observacionesgenerales` de un registro real que mencionaba "falta de lastrado".
+
+**Columnas descartadas (existen en la lista, no forman parte de `PESOS_PO`, no se seleccionan):**
+`Se_x00f1_alizaci_x00f3_nvertical3` (Marca contratista), certificación/indumentaria de
+auxiliares, cantidad de maletines/balizas/conos, condición del flujo vehicular, reporte de
+imprevistos, boleta de supervisión, y las columnas de las etapas DO/FO (esas pertenecen al
+histórico que ya no se puntúa — ver la nota original de la guía sobre columnas de fases
+anteriores).
+
+**Algoritmo de fusión y manejo de duplicados (para `app.js`):**
+
+```
+function fusionarImplementacion(registrosCrudos):
+  ladoDG = registros donde contrato_dg/frente_dg/fecha_dg tienen valor
+  ladoPO = registros donde contrato_po/frente_po/fecha_po tienen valor
+
+  # Indexar cada lado por clave "contrato|frente|fecha", resolviendo duplicados:
+  # si dos filas comparten la misma clave, se conserva la de id MÁS ALTO (envío más
+  # reciente = probable corrección de un envío duplicado por error). La descartada NO se
+  # pierde en silencio: se registra en una lista de "duplicados ignorados".
+  dgPorClave, duplicadosDG = indexarConDedup(ladoDG, clave=contrato_dg+frente_dg+fecha_dg)
+  poPorClave, duplicadosPO = indexarConDedup(ladoPO, clave=contrato_po+frente_po+fecha_po)
+
+  # Cruzar: para cada entrada PO, buscar su pareja DG por la misma clave
+  para cada registro PO en poPorClave:
+    dg = dgPorClave[misma clave] (o null si no existe)
+    fusionado = combinar(datos de dg si existe, checklist y puntaje de PO)
+    si dg es null: marcar fusionado.incompleto = true (falta el lado DG)
+  # Igual al revés: entradas DG sin pareja PO -> registro "incompleto" (falta el lado PO),
+  # se muestra igual, no se descarta, con puntaje null (sin_dato).
+
+  si duplicadosDG.length + duplicadosPO.length > 0:
+    mostrar aviso visible en el tablero (no solo en consola) con el conteo total
+  retornar { registrosFusionados, duplicadosIgnorados: duplicadosDG + duplicadosPO }
+```
+
+**Requisito de interfaz derivado de este algoritmo:** un registro `incompleto` (falta un lado)
+debe seguir siendo visible en la tabla, no ocultarse — con su puntaje como "Sin dato" y alguna
+señal visual clara (ej. una etiqueta "Incompleto") en vez de fallar o mostrarse como si tuviera
+puntaje 0%. Perder visibilidad sobre datos incompletos es tan malo como que la app se rompa.
+
 ## 10. Fotos de evidencia fotográfica (decisión en curso, con interruptor)
 
 Las listas de SharePoint incluyen **adjuntos nativos** (fotos tomadas desde el formulario de
@@ -264,7 +363,45 @@ API de contenido de GitHub usada para los JSON tiene un límite práctico cercan
 archivo en una sola operación — probablemente se necesite comprimir/redimensionar en Power
 Automate antes de subir, o usar una API distinta de GitHub para archivos grandes.
 
-## 11. Convenciones acordadas
+## 11. Identidad visual EPM (logo + paleta de colores)
+
+**Logo:** archivo `LogoEPM.png` — debe subirse a la raíz del repositorio (o a una carpeta
+`assets/`) y colocarse en la esquina superior izquierda del encabezado del tablero. Tiene
+fondo transparente, así que funciona bien sobre cualquier color de fondo del encabezado.
+
+**Colores reales del logo (extraídos por muestreo de píxeles, no aproximados):**
+- Verde principal: `#00a950`
+- Verde claro: `#9fce66`
+
+**Paleta complementaria oficial EPM** (proporcionada por el usuario, gama completa
+naranja→amarillo→verde→verde azulado, sin ningún tono rojo).
+
+**Decisión de diseño — conflicto resuelto:** el semáforo de cumplimiento (verde/amarillo/rojo)
+necesita que "crítico" se distinga con fuerza visual de "cumple", y la paleta EPM no tiene
+rojo. Se decidió usar el naranja más intenso de la paleta complementaria como sustituto de
+rojo para "crítico" — se mantiene dentro de marca y, como beneficio adicional, mejora la
+accesibilidad para daltonismo rojo-verde (el tipo más común) al usar naranja-verde en vez de
+rojo-verde.
+
+**Paleta final a usar en `styles.css` (variables CSS):**
+
+```css
+:root {
+  --color-marca: #00a950;       /* verde principal EPM (logo, encabezado, acentos) */
+  --color-marca-clara: #9fce66; /* verde claro EPM (acentos secundarios) */
+  --color-verde: #00a950;       /* semáforo: Cumple */
+  --color-amarillo: #d5c700;    /* semáforo: Por mejorar (Pantone 389) */
+  --color-rojo: #d56b00;        /* semáforo: Crítico — en realidad naranja, ver nota arriba */
+  --color-sin-dato: #9e9e9e;    /* semáforo: Sin dato — gris neutro, fuera de la paleta EPM */
+}
+```
+
+**Importante:** aunque la variable se siga llamando `--color-rojo` (por consistencia con el
+resto del código que ya usa esa clase `.rojo` para "crítico" — ver `app.js`, sección de
+`ETIQUETAS_SEMAFORO`), su valor real es naranja. No renombrar la variable ni la clase CSS, eso
+obligaría a tocar `app.js` sin necesidad; solo cambia el valor del color.
+
+## 12. Convenciones acordadas
 
 - Nombres de archivo: minúsculas, sin tildes, sin espacios (evita romper GitHub Pages, que
   es case-sensitive, a diferencia de Windows).
