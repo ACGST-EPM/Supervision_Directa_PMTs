@@ -107,6 +107,17 @@ estructura DG/PO y el algoritmo de fusión) está documentado completo en la sec
 es un pendiente. Rutinarios NO tiene la estructura de dos tarjetas DG/PO — es un único
 formulario, sin necesidad de fusión.
 
+**Deduplicación en Rutinarios (distinta a la de Implementación):** a diferencia de
+Implementación, en Rutinarios cada envío del formulario ya llega completo en una sola fila —
+no hay que fusionar nada. Pero puede pasar que alguien diligencie el formulario dos o más
+veces por error con el mismo `contrato+frente+fecha` (mismo tipo de error humano que en
+Implementación, aplicado aquí a un solo lado). Regla: en `app.js`, antes de calcular puntajes,
+indexar los registros de Rutinarios por la clave `contrato+frente+fecha` — si hay más de un
+registro con la misma clave, conservar únicamente el de `id` más alto (el envío más reciente)
+y descartar los demás. Igual que en Implementación, los descartados no desaparecen en
+silencio: se suman al mismo contador de `duplicadosIgnorados` y al mismo aviso visible en el
+tablero (un solo contador combinado para las dos listas, no dos avisos separados).
+
 **Validación obligatoria antes de activar la recurrencia:** los pesos de los ítems
 seleccionados en Implementación deben sumar exactamente 1.00 (100%). Si no suman, hay un
 ítem mal enlazado — la misma clase de error que causó el bug original.
