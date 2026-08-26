@@ -9,11 +9,16 @@
 <body>
 
 <header class="cabecera">
-  <h1>Tablero de Seguimiento PMTs</h1>
-  <p>Cumplimiento de Planes de Manejo de Tránsito — Rutinarios y Puesta en Operación (PO)</p>
+  <img src="LogoEPM.png" alt="Logo EPM" class="logo-epm">
+  <div class="cabecera-texto">
+    <h1>Tablero de Seguimiento PMTs</h1>
+    <p>Cumplimiento de Planes de Manejo de Tránsito — Rutinarios y Puesta en Operación (PO)</p>
+  </div>
 </header>
 
 <main>
+
+  <p id="aviso-duplicados" class="aviso-duplicados" hidden></p>
 
   <section id="seccion-resumen" aria-label="Resumen">
     <h2>Resumen</h2>
@@ -36,6 +41,12 @@
       <div class="campo-filtro">
         <label for="filtro-contrato">Contrato</label>
         <select id="filtro-contrato">
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-frente">Frente</label>
+        <select id="filtro-frente">
           <option value="todos">Todos</option>
         </select>
       </div>
@@ -82,11 +93,13 @@
             <th>Fecha</th>
             <th>Tipo</th>
             <th>Contrato</th>
+            <th>Frente</th>
             <th>Proyecto</th>
             <th>Contratista</th>
             <th>Dirección</th>
             <th>Puntaje</th>
             <th>Semáforo</th>
+            <th>Notas</th>
           </tr>
         </thead>
         <tbody id="cuerpo-tabla">
