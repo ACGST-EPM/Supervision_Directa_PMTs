@@ -225,8 +225,15 @@
       normStr(r.diligenciado_por) || normStr(r.direccion) || normStr(r.tipo_cierre));
   }
 
+  // OJO: `frente_po` NO cuenta por sí solo como evidencia de "hay dato en el lado PO".
+  // Se encontraron 14 filas reales que son en realidad un DG completo (contrato, frente,
+  // fecha, diligenciado_por, dirección, tipo de cierre) con un valor suelto en `frente_po`
+  // sin `contrato_po` ni `fecha_po` ni ningún ítem del checklist contestado — probablemente
+  // un residuo de la tarjeta PO que el usuario abrió y no llegó a diligenciar. Si `frente_po`
+  // contara como evidencia, esas 14 filas se mostrarían DOS veces: una por su lado DG real y
+  // otra como una fila PO fantasma "incompleta" con el mismo `id`.
   function tieneDatoPO(r) {
-    if (normStr(r.contrato_po) || normStr(r.frente_po) || normStr(r.fecha_po) || normStr(r.observaciones)) return true;
+    if (normStr(r.contrato_po) || normStr(r.fecha_po) || normStr(r.observaciones)) return true;
     return Object.keys(PESOS_PO).some((clave) => normStr(r[clave]) !== '');
   }
 
@@ -269,39 +276,51 @@
     // 1) Descartar filas que no traen ningún dato en ninguno de los dos lados.
     const conDatos = registrosCrudos.filter((r) => tieneDatoDG(r) || tieneDatoPO(r));
 
-    const ladoDG = conDatos.filter(tieneDatoDG);
-    const ladoPO = conDatos.filter(tieneDatoPO);
+    // 2) Filas que ya traen evidencia de los DOS lados en la MISMA fila cruda, con el lado
+    //    PO de clave incompleta (falta contrato_po y/o fecha_po ahí mismo): no hay que
+    //    cruzarlas contra otra fila para saber que ese checklist les pertenece — ya viven en
+    //    el mismo `id`. Se fusionan directo consigo mismas y quedan fuera del resto del
+    //    algoritmo, para no mostrar el mismo envío dos veces (una por su lado DG y otra como
+    //    fila PO fantasma "incompleta"). Nunca se marcan como "incompleto" salvo que su
+    //    propia clave DG tampoco esté completa.
+    const autoFusionadas = conDatos.filter((r) => tieneDatoDG(r) && tieneDatoPO(r) && !claveCompletaPO(r));
+    const autoFusionadasIds = new Set(autoFusionadas.map((r) => r.id));
+    const restantes = conDatos.filter((r) => !autoFusionadasIds.has(r.id));
 
-    // 2) Separar clave completa (se puede cruzar) de clave parcial (nunca se cruza,
-    //    para no fusionar por error filas no relacionadas que compartan solo frente+fecha).
+    const ladoDG = restantes.filter(tieneDatoDG);
+    const ladoPO = restantes.filter(tieneDatoPO);
+
+    // 3) Del resto, separar clave completa (se puede cruzar) de clave parcial (nunca se
+    //    cruza, para no fusionar por error filas no relacionadas que compartan solo
+    //    frente+fecha).
     const dgCompleta = ladoDG.filter(claveCompletaDG);
     const poCompleta = ladoPO.filter(claveCompletaPO);
     const dgParcial = ladoDG.filter((r) => !claveCompletaDG(r));
     const poParcial = ladoPO.filter((r) => !claveCompletaPO(r));
 
-    // 3) Indexar (y deduplicar) solo lo que tiene clave completa.
+    // 4) Indexar (y deduplicar) solo lo que tiene clave completa.
     const { porClave: dgPorClave, duplicados: duplicadosDG } =
       indexarConDedup(dgCompleta, (r) => claveTripleta(r.contrato_dg, r.frente_dg, r.fecha_dg));
     const { porClave: poPorClave, duplicados: duplicadosPO } =
       indexarConDedup(poCompleta, (r) => claveTripleta(r.contrato_po, r.frente_po, r.fecha_po));
 
-    const registros = [];
+    const registros = autoFusionadas.map((r) => construirRegistroDesdePO(r, r, !claveCompletaDG(r)));
     const clavesDGUsadas = new Set();
 
-    // 4) Cruzar: cada PO de clave completa busca su pareja DG por la misma clave.
+    // 5) Cruzar: cada PO de clave completa busca su pareja DG por la misma clave.
     poPorClave.forEach((po, clave) => {
       const dg = dgPorClave.get(clave) || null;
       if (dg) clavesDGUsadas.add(clave);
       registros.push(construirRegistroDesdePO(po, dg, dg === null));
     });
 
-    // 5) DG de clave completa que no encontraron pareja PO -> incompletos (falta el PO).
+    // 6) DG de clave completa que no encontraron pareja PO -> incompletos (falta el PO).
     dgPorClave.forEach((dg, clave) => {
       if (clavesDGUsadas.has(clave)) return;
       registros.push(construirRegistroDesdeDG(dg, true));
     });
 
-    // 6) Clave parcial de cualquiera de los dos lados -> siempre incompletos, nunca se
+    // 7) Clave parcial de cualquiera de los dos lados -> siempre incompletos, nunca se
     //    intenta emparejar.
     dgParcial.forEach((r) => registros.push(construirRegistroDesdeDG(r, true)));
     poParcial.forEach((r) => registros.push(construirRegistroDesdePO(r, null, true)));
