@@ -102,7 +102,8 @@ construya — nunca omitir este campo ahí tampoco.
 | platinas_pernadas | `Platinas_x003a_pernadas_x002c_an` → `.Value` |
 | via_despejada | `V_x00ed_adespejada` → `.Value` |
 
-**RESUELTO:** el mapeo completo de Implementación (17 ítems del checklist PO, más la
+**RESUELTO EN EL DISEÑO (NO en el código todavía — verificado por auditoría de Claude Code):**
+el mapeo completo de Implementación (17 ítems del checklist PO, más la
 estructura DG/PO y el algoritmo de fusión) está documentado completo en la sección 9 — ya no
 es un pendiente. Rutinarios NO tiene la estructura de dos tarjetas DG/PO — es un único
 formulario, sin necesidad de fusión.
@@ -117,6 +118,27 @@ registro con la misma clave, conservar únicamente el de `id` más alto (el env�
 y descartar los demás. Igual que en Implementación, los descartados no desaparecen en
 silencio: se suman al mismo contador de `duplicadosIgnorados` y al mismo aviso visible en el
 tablero (un solo contador combinado para las dos listas, no dos avisos separados).
+
+**Tabla de correspondencia `funcionarios.json` (nueva, análoga a `contratos.json`):** el campo
+`diligenciado_por` de Rutinarios llega como un número de registro de SharePoint (ej.
+`119011.0`), no como nombre — confirmado por auditoría. Se decidió así en el diseño original
+del PowerApp de esa tarjeta. En Implementación, en cambio, ese mismo campo ya llega como texto
+con el nombre real (ej. "Leydi Johana Marín Zapata") — no necesita esta tabla.
+
+Se crea `funcionarios.json` en la raíz del repo, mantenido a mano igual que `contratos.json`
+(cambia con poca frecuencia, no vale la pena automatizarlo). Estructura:
+```json
+[
+  { "numero_registro": "119011", "nombre": "NOMBRE EJEMPLO", "cargo": "CARGO EJEMPLO" }
+]
+```
+El archivo se crea con este único registro de ejemplo — el usuario lo completa con los datos
+reales después. `app.js` debe cargarlo por `fetch()` igual que `contratos.json`, y al mostrar
+`diligenciado_por` en Rutinarios: normalizar el número (quitar el `.0` si llega como número
+decimal, convertir a texto) y buscarlo en `funcionarios.json`. Si hay coincidencia, mostrar
+"Nombre — Cargo". Si no hay coincidencia (el archivo está incompleto o es un número nuevo),
+mostrar el número crudo con una etiqueta visible tipo "Funcionario no identificado (119011)"
+— mismo principio de siempre: nunca ocultar, siempre señalar lo que no se pudo resolver.
 
 **Validación obligatoria antes de activar la recurrencia:** los pesos de los ítems
 seleccionados en Implementación deben sumar exactamente 1.00 (100%). Si no suman, hay un
@@ -304,27 +326,47 @@ imprevistos, boleta de supervisión, y las columnas de las etapas DO/FO (esas pe
 histórico que ya no se puntúa — ver la nota original de la guía sobre columnas de fases
 anteriores).
 
-**Algoritmo de fusión y manejo de duplicados (para `app.js`):**
+**Algoritmo de fusión y manejo de duplicados (para `app.js`) — CORREGIDO tras auditoría de
+Claude Code, que encontró filas de clave parcial (contrato vacío pero frente/fecha con datos)
+y filas totalmente vacías que el diseño original no contemplaba:**
 
 ```
 function fusionarImplementacion(registrosCrudos):
+  # PRIMERO: descartar filas sin ningún dato en ninguno de los dos lados —
+  # no aportan nada, no tiene sentido mostrarlas ni como "incompletas" (confirmado por
+  # auditoría: 41 de 100 filas reales caían en este caso).
+  registrosCrudos = registrosCrudos.filter(r => tieneAlgunDatoDG(r) || tieneAlgunDatoPO(r))
+
   ladoDG = registros donde contrato_dg/frente_dg/fecha_dg tienen valor
   ladoPO = registros donde contrato_po/frente_po/fecha_po tienen valor
 
-  # Indexar cada lado por clave "contrato|frente|fecha", resolviendo duplicados:
-  # si dos filas comparten la misma clave, se conserva la de id MÁS ALTO (envío más
-  # reciente = probable corrección de un envío duplicado por error). La descartada NO se
-  # pierde en silencio: se registra en una lista de "duplicados ignorados".
-  dgPorClave, duplicadosDG = indexarConDedup(ladoDG, clave=contrato_dg+frente_dg+fecha_dg)
-  poPorClave, duplicadosPO = indexarConDedup(ladoPO, clave=contrato_po+frente_po+fecha_po)
+  # CLAVE: solo indexar (para poder cruzar) las filas cuya clave está COMPLETA
+  # (contrato, frente Y fecha, los tres con valor). Una fila con clave parcial (ej.
+  # contrato_po vacío pero frente_po/fecha_po con datos — 14 casos reales encontrados)
+  # NUNCA entra al índice de cruce, porque agruparla por una clave incompleta podría
+  # fusionarla por error con otra fila no relacionada que comparta solo frente+fecha.
+  # Esa fila se muestra igual, pero como "incompleta / sin cruce posible", nunca se
+  # intenta emparejar.
+  dgConClaveCompleta = ladoDG.filter(clave completa)
+  poConClaveCompleta = ladoPO.filter(clave completa)
+  dgClaveParcial = ladoDG.filter(clave incompleta)  # -> se muestran como incompletas, sin cruce
+  poClaveParcial = ladoPO.filter(clave incompleta)  # -> se muestran como incompletas, sin cruce
 
-  # Cruzar: para cada entrada PO, buscar su pareja DG por la misma clave
+  # Indexar solo lo que tiene clave completa, resolviendo duplicados:
+  # si dos filas comparten la misma clave completa, se conserva la de id MÁS ALTO (envío
+  # más reciente = probable corrección de un envío duplicado por error). La descartada NO
+  # se pierde en silencio: se registra en "duplicados ignorados".
+  dgPorClave, duplicadosDG = indexarConDedup(dgConClaveCompleta, clave=contrato_dg+frente_dg+fecha_dg)
+  poPorClave, duplicadosPO = indexarConDedup(poConClaveCompleta, clave=contrato_po+frente_po+fecha_po)
+
+  # Cruzar: para cada entrada PO con clave completa, buscar su pareja DG por la misma clave
   para cada registro PO en poPorClave:
     dg = dgPorClave[misma clave] (o null si no existe)
     fusionado = combinar(datos de dg si existe, checklist y puntaje de PO)
     si dg es null: marcar fusionado.incompleto = true (falta el lado DG)
-  # Igual al revés: entradas DG sin pareja PO -> registro "incompleto" (falta el lado PO),
-  # se muestra igual, no se descarta, con puntaje null (sin_dato).
+  # Igual al revés: entradas DG sin pareja PO -> "incompleto" (falta el lado PO).
+  # Más las filas de clave parcial (dgClaveParcial, poClaveParcial): se agregan también
+  # como "incompletas / sin cruce posible", cada una tal cual, sin intentar emparejar.
 
   si duplicadosDG.length + duplicadosPO.length > 0:
     mostrar aviso visible en el tablero (no solo en consola) con el conteo total
@@ -336,12 +378,21 @@ debe seguir siendo visible en la tabla, no ocultarse — con su puntaje como "Si
 señal visual clara (ej. una etiqueta "Incompleto") en vez de fallar o mostrarse como si tuviera
 puntaje 0%. Perder visibilidad sobre datos incompletos es tan malo como que la app se rompa.
 
-**Hallazgo de la verificación con datos reales (post-activación del flujo):** al probar el
-motor de puntaje sobre datos reales de producción, aparecieron dos problemas de calidad de
-dato (error humano al diligenciar el formulario, no un bug del flujo): un contrato con espacio
-de más (`"CW 327799"` en vez de `"CW327799"`) y un contrato inexistente en `contratos.json`
-(`"CW3000"`). Ninguno de los dos rompe el cálculo del puntaje (que no depende de `contratos.json`),
-pero sí rompe el cruce contrato→proyecto→contratista para mostrar esos datos en pantalla.
+**Hallazgo de la verificación con datos reales (post-activación del flujo), CORREGIDO tras
+auditoría de Claude Code sobre los 100 registros reales de cada lista:** aparecieron problemas
+de calidad de dato (error humano al diligenciar el formulario, no un bug del flujo). La
+normalización de espacios/mayúsculas es necesaria pero **no basta por sí sola** — se
+confirmaron 3 códigos de contrato que no existen en `contratos.json`, ni siquiera
+normalizados, y requieren una decisión de negocio (agregarlos a `contratos.json` si son
+válidos, o tratarlos como error de diligenciamiento):
+- `CW348929` (aparece en Rutinarios)
+- `CW327799` (aparece en Implementación, ambos lados — con y sin espacio; ninguna variante
+  existe en `contratos.json`)
+- `CW3000` (aparece en Implementación, lado PO — probable error de tipeo de `CW328120`)
+
+Hasta que el usuario confirme cuál de estos es válido, los tres se tratan igual: se muestran
+con la etiqueta "Contrato no reconocido" (ver regla de normalización abajo), nunca se ocultan
+ni se inventa a qué proyecto pertenecen.
 
 **Regla de normalización (para `app.js`):** antes de cruzar `contrato`/`contrato_po`/`contrato_dg`
 contra `contratos.json`, normalizar ambos lados (quitar espacios sobrantes con `trim()`, colapsar
