@@ -325,6 +325,19 @@ debe seguir siendo visible en la tabla, no ocultarse — con su puntaje como "Si
 señal visual clara (ej. una etiqueta "Incompleto") en vez de fallar o mostrarse como si tuviera
 puntaje 0%. Perder visibilidad sobre datos incompletos es tan malo como que la app se rompa.
 
+**Hallazgo de la verificación con datos reales (post-activación del flujo):** al probar el
+motor de puntaje sobre datos reales de producción, aparecieron dos problemas de calidad de
+dato (error humano al diligenciar el formulario, no un bug del flujo): un contrato con espacio
+de más (`"CW 327799"` en vez de `"CW327799"`) y un contrato inexistente en `contratos.json`
+(`"CW3000"`). Ninguno de los dos rompe el cálculo del puntaje (que no depende de `contratos.json`),
+pero sí rompe el cruce contrato→proyecto→contratista para mostrar esos datos en pantalla.
+
+**Regla de normalización (para `app.js`):** antes de cruzar `contrato`/`contrato_po`/`contrato_dg`
+contra `contratos.json`, normalizar ambos lados (quitar espacios sobrantes con `trim()`, colapsar
+espacios internos, pasar a mayúsculas) antes de comparar. Si aun así no hay coincidencia, el
+registro se muestra igual — nunca se descarta — con una etiqueta visible "Contrato no
+reconocido" en vez de dejar el proyecto/contratista en blanco sin explicación.
+
 ## 10. Fotos de evidencia fotográfica (decisión en curso, con interruptor)
 
 Las listas de SharePoint incluyen **adjuntos nativos** (fotos tomadas desde el formulario de
