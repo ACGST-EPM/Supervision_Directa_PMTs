@@ -1,3 +1,5 @@
 [
-  { "numero_registro": "119011", "nombre": "NOMBRE EJEMPLO", "cargo": "CARGO EJEMPLO" }
+  { "numero_registro": "119011", "nombre": "Sergio Ochoa", "cargo": "Profesional C" },
+  { "numero_registro": "118995", "nombre": "Leydi Marín", "cargo": "Profesional C" },
+  { "numero_registro": "117227", "nombre": "Julián Sánchez", "cargo": "Profesional A" }
 ]
