@@ -356,6 +356,10 @@
     const resultado = evaluarPonderado(row, pesos);
     return Object.assign({}, row, {
       tipo: tipo,
+      // Se normaliza aquí, en el único punto donde nacen los registros que alimentan
+      // tabla, filtros, gráfico y búsqueda, para que el código de contrato se muestre
+      // igual que como se compara contra contratos.json (ver normalizarContrato).
+      contrato: normalizarContrato(row.contrato),
       puntaje: resultado.pct,
       n_items: resultado.n_items,
       semaforo: semaforoDe(resultado.pct),
