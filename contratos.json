@@ -6,10 +6,34 @@
     "municipios": ["Medellín"]
   },
   {
+    "contrato": "CW348929",
+    "contratista": "CALCULO CONSTRUCCIONES",
+    "proyecto": "BOMBEO CORAZON - CORAZON ALTO",
+    "municipios": ["Medellín"]
+  },
+  {
+    "contrato": "CW280931",
+    "contratista": "PAECIA",
+    "proyecto": "IO44- TRAMPA GRAVAS",
+    "municipios": ["Medellín"]
+  },
+  {
     "contrato": "CW322377",
     "contratista": "Consorcio AMT24",
     "proyecto": "AMPLIACION_TANQUES",
     "municipios": ["Medellín", "Envigado"]
+  },
+  {
+    "contrato": "CW353551",
+    "contratista": "Consorcio Redes AMVA 2024",
+    "proyecto": "INTERCEPTOR SUR E2 - C2",
+    "municipios": ["Caldas", "La Estrella"]
+  },
+  {
+    "contrato": "CW369125",
+    "contratista": "CONINSA",
+    "proyecto": "PTAR ESCOBERO",
+    "municipios": ["Envigado"]
   },
   {
     "contrato": "CW323849",
