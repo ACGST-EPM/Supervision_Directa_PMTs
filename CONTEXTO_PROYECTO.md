@@ -382,13 +382,22 @@ puntaje 0%. Perder visibilidad sobre datos incompletos es tan malo como que la a
 auditoría de Claude Code sobre los 100 registros reales de cada lista:** aparecieron problemas
 de calidad de dato (error humano al diligenciar el formulario, no un bug del flujo). La
 normalización de espacios/mayúsculas es necesaria pero **no basta por sí sola** — se
-confirmaron 3 códigos de contrato que no existen en `contratos.json`, ni siquiera
+confirmaron 6 códigos de contrato que no existen en `contratos.json`, ni siquiera
 normalizados, y requieren una decisión de negocio (agregarlos a `contratos.json` si son
 válidos, o tratarlos como error de diligenciamiento):
-- `CW348929` (aparece en Rutinarios)
-- `CW327799` (aparece en Implementación, ambos lados — con y sin espacio; ninguna variante
-  existe en `contratos.json`)
-- `CW3000` (aparece en Implementación, lado PO — probable error de tipeo de `CW328120`)
+- `CW348929` (Rutinarios)
+- `CW353551` (Rutinarios — verificado sobre las 233 filas reales completas)
+- `CW369125` (Rutinarios — verificado sobre las 233 filas reales completas)
+- `CW280931` (Rutinarios — verificado sobre las 233 filas reales completas)
+- `CW327799` (Implementación, ambos lados — con y sin espacio; ninguna variante existe en
+  `contratos.json`)
+- `CW3000` (Implementación, lado PO — probable error de tipeo de `CW328120`)
+
+**Typo adicional encontrado (mismo tratamiento que los contratos huérfanos):** el registro
+`id: 228` de Rutinarios tiene `diligenciado_por: 8992996` (con un dígito de más) en vez de
+`992996`, el número correcto que usa esa misma persona en el resto de sus registros. Al buscar
+en `funcionarios.json` no va a encontrar coincidencia — debe mostrar "Funcionario no
+identificado", no fallar ni quedar en blanco.
 
 Hasta que el usuario confirme cuál de estos es válido, los tres se tratan igual: se muestran
 con la etiqueta "Contrato no reconocido" (ver regla de normalización abajo), nunca se ocultan
@@ -399,6 +408,42 @@ contra `contratos.json`, normalizar ambos lados (quitar espacios sobrantes con `
 espacios internos, pasar a mayúsculas) antes de comparar. Si aun así no hay coincidencia, el
 registro se muestra igual — nunca se descarta — con una etiqueta visible "Contrato no
 reconocido" en vez de dejar el proyecto/contratista en blanco sin explicación.
+
+**AMPLIACIÓN de la regla (verificado que faltaba — la normalización aplicada primero solo
+cubría la visualización, no el cruce DG/PO):** la clave de fusión `contrato+frente+fecha` que
+usa `fusionarImplementacion()` (y el equivalente de deduplicación en Rutinarios) también debe
+construirse con los valores YA NORMALIZADOS, no con los valores crudos. Si no se hace así, dos
+envíos de la misma inspección real (uno DG, uno PO) con el mismo contrato pero escrito con
+espacios o mayúsculas distintas (ej. `"CW 327799"` vs `"CW327799"`) nunca se identifican como
+la misma clave y el algoritmo los deja como dos registros "Incompleto" separados en vez de
+fusionarlos en uno completo — inflando artificialmente el conteo de incompletos.
+
+**Verificación a escala completa (1960 filas reales de `crudo_implementacion.json`, corrida
+por Claude Code, matemática verificada a nivel de "lado" DG/PO — sirve como número de
+referencia para comparar tras aplicar la ampliación de normalización de arriba):**
+
+| Categoría | Cantidad |
+|---|---|
+| Filas totalmente vacías | 807 de 1960 (41% — proporción consistente con la muestra de 100) |
+| Fusionados completos (DG+PO cruzados por clave) | 458 |
+| Autofusionados (ambos lados en la misma fila cruda) | 46 |
+| Incompleto — sin PO (DG huérfano) | 153 |
+| Incompleto — sin DG (PO huérfano) | 84 |
+| Incompleto — clave parcial | 2 |
+| Descartados por duplicado | 27 (todos del lado PO) |
+| **Total registros finales mostrados (antes de la ampliación)** | **743** |
+
+Se espera que, tras normalizar también la clave de cruce, el número de "Incompleto" baje y el
+de "Fusionados completos" suba (algunos pares que hoy no cruzan por diferencias de formato sí
+deberían cruzar). El nuevo total no tiene que coincidir con 743 — lo que hay que verificar es
+que la aritmética por lado siga cerrando exacta, igual que arriba.
+
+**Nota de infraestructura Git (importante antes de fusionar el Pull Request):** el archivo real
+de 1960 filas vive en `main` (donde Power Automate escribe todos los días); el branch
+`mejoras-datos-reales` tiene congelada una copia vieja de 100 filas desde que se creó. Antes de
+fusionar el PR, hay que sincronizar el branch con `main` (traer los cambios de `main` al
+branch) para no arriesgar que el merge sobreescriba los datos reales de producción con la
+copia vieja de muestra.
 
 ## 10. Fotos de evidencia fotográfica (decisión en curso, con interruptor)
 
