@@ -438,6 +438,26 @@ de "Fusionados completos" suba (algunos pares que hoy no cruzan por diferencias 
 deberían cruzar). El nuevo total no tiene que coincidir con 743 — lo que hay que verificar es
 que la aritmética por lado siga cerrando exacta, igual que arriba.
 
+**Resultado tras aplicar la ampliación (clave de cruce ya normalizada, corrido sobre las mismas
+1960 filas reales):**
+
+| Categoría | Antes | Después |
+|---|---|---|
+| Filas totalmente vacías | 807 | 807 (sin cambio, no depende de la clave de cruce) |
+| Fusionados completos (DG+PO cruzados por clave) | 458 | **469** (+11) |
+| Autofusionados (ambos lados en la misma fila cruda) | 46 | 46 (sin cambio, no depende de la clave de cruce) |
+| Incompleto — sin PO (DG huérfano) | 153 | **142** (−11) |
+| Incompleto — sin DG (PO huérfano) | 84 | **73** (−11) |
+| Incompleto — clave parcial | 2 | 2 (sin cambio) |
+| Descartados por duplicado | 27 (todos del lado PO) | 27 (sin cambio) |
+| **Total registros finales mostrados** | 743 | **732** (−11) |
+
+Los 11 pares que antes no cruzaban por diferencias de espacios/mayúsculas en el contrato ahora
+sí se fusionan en uno completo (en vez de quedar como dos registros "Incompleto" separados),
+como se esperaba. La aritmética por lado sigue cerrando exacta:
+- Lado DG: 611 clave completa = 0 duplicados + 611 únicos = 142 (sin PO) + 469 (fusionados)
+- Lado PO: 569 clave completa = 27 duplicados + 542 únicos = 73 (sin DG) + 469 (fusionados)
+
 **Nota de infraestructura Git (importante antes de fusionar el Pull Request):** el archivo real
 de 1960 filas vive en `main` (donde Power Automate escribe todos los días); el branch
 `mejoras-datos-reales` tiene congelada una copia vieja de 100 filas desde que se creó. Antes de

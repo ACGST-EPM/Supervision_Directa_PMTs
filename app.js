@@ -162,18 +162,20 @@
     return (v == null ? '' : String(v)).trim();
   }
 
-  // Clave de cruce/deduplicación contrato+frente+fecha. Solo se usa para *comparar* filas
-  // entre sí (Rutinarios contra sí mismo, o DG contra PO en Implementación) — no tiene
-  // relación con la normalización de contrato contra contratos.json (ver normalizarContrato).
-  function claveTripleta(contrato, frente, fecha) {
-    return `${normStr(contrato)}|${normStr(frente)}|${normStr(fecha)}`;
-  }
-
   // Contrato: quita espacios sobrantes, colapsa/elimina espacios internos (un código de
   // contrato nunca debería tener espacios de por sí — el espacio es siempre un error de
   // tipeo) y pasa a mayúsculas, para poder cruzar contra contratos.json de forma tolerante.
   function normalizarContrato(c) {
     return normStr(c).replace(/\s+/g, '').toUpperCase();
+  }
+
+  // Clave de cruce/deduplicación contrato+frente+fecha. Se usa para *comparar* filas entre
+  // sí (Rutinarios contra sí mismo, o DG contra PO en Implementación). El contrato se
+  // normaliza igual que para el cruce contra contratos.json (ver normalizarContrato), para
+  // que un error de tipeo con espacios (ej. "CW 327799" vs "CW327799") no impida detectar
+  // que dos filas son en realidad el mismo contrato+frente+fecha.
+  function claveTripleta(contrato, frente, fecha) {
+    return `${normalizarContrato(contrato)}|${normStr(frente)}|${normStr(fecha)}`;
   }
 
   // Número de funcionario: quita el ".0" que agrega SharePoint cuando el campo se guarda
