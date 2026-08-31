@@ -438,26 +438,6 @@ de "Fusionados completos" suba (algunos pares que hoy no cruzan por diferencias 
 deberían cruzar). El nuevo total no tiene que coincidir con 743 — lo que hay que verificar es
 que la aritmética por lado siga cerrando exacta, igual que arriba.
 
-**Resultado tras aplicar la ampliación (clave de cruce ya normalizada, corrido sobre las mismas
-1960 filas reales):**
-
-| Categoría | Antes | Después |
-|---|---|---|
-| Filas totalmente vacías | 807 | 807 (sin cambio, no depende de la clave de cruce) |
-| Fusionados completos (DG+PO cruzados por clave) | 458 | **469** (+11) |
-| Autofusionados (ambos lados en la misma fila cruda) | 46 | 46 (sin cambio, no depende de la clave de cruce) |
-| Incompleto — sin PO (DG huérfano) | 153 | **142** (−11) |
-| Incompleto — sin DG (PO huérfano) | 84 | **73** (−11) |
-| Incompleto — clave parcial | 2 | 2 (sin cambio) |
-| Descartados por duplicado | 27 (todos del lado PO) | 27 (sin cambio) |
-| **Total registros finales mostrados** | 743 | **732** (−11) |
-
-Los 11 pares que antes no cruzaban por diferencias de espacios/mayúsculas en el contrato ahora
-sí se fusionan en uno completo (en vez de quedar como dos registros "Incompleto" separados),
-como se esperaba. La aritmética por lado sigue cerrando exacta:
-- Lado DG: 611 clave completa = 0 duplicados + 611 únicos = 142 (sin PO) + 469 (fusionados)
-- Lado PO: 569 clave completa = 27 duplicados + 542 únicos = 73 (sin DG) + 469 (fusionados)
-
 **Nota de infraestructura Git (importante antes de fusionar el Pull Request):** el archivo real
 de 1960 filas vive en `main` (donde Power Automate escribe todos los días); el branch
 `mejoras-datos-reales` tiene congelada una copia vieja de 100 filas desde que se creó. Antes de
@@ -541,7 +521,37 @@ resto del código que ya usa esa clase `.rojo` para "crítico" — ver `app.js`,
 `ETIQUETAS_SEMAFORO`), su valor real es naranja. No renombrar la variable ni la clase CSS, eso
 obligaría a tocar `app.js` sin necesidad; solo cambia el valor del color.
 
-## 12. Convenciones acordadas
+## 12. Mejoras UX — ronda posterior al MVP (branch `mejoras-ux`)
+
+**Filtro por "diligenciado por":** nuevo filtro desplegable, poblado dinámicamente con los
+valores distintos presentes en los datos ya cargados (nombre resuelto vía `funcionarios.json`
+cuando exista, valor crudo si no).
+
+**Bug del filtro de texto con `municipios`:** `municipios` en `contratos.json` es un arreglo,
+no texto plano — pendiente de diagnóstico por Claude Code antes de corregir (no se asume la
+causa sin ver el código de la función de búsqueda primero).
+
+**Gráficos dinámicos — decisión de arquitectura:** se agrega **Chart.js vía CDN** (una sola
+etiqueta `<script>` en `index.html`, sin build ni npm) — primera dependencia externa del
+proyecto además de las fuentes/logo. Dos gráficos, ambos reactivos a los filtros activos:
+torta de distribución por semáforo (colores de la sección 11), y línea de evolución de
+cumplimiento en el tiempo (eje X fecha, eje Y % promedio de esa fecha).
+
+**Regla nueva — ocultar registros "Sin dato" (distinta de "Incompleto", que se sigue
+mostrando siempre):** un registro con `semaforo === 'sin_dato'` (ningún ítem del checklist
+respondido) no aporta información real y se excluye de tabla, contadores y gráficos, en ambas
+listas. No se oculta en silencio: se muestra un aviso visible con el conteo, mismo patrón que
+el aviso de duplicados.
+
+**Pausados por decisión del usuario, no técnica (no aparecen en el prompt de esta ronda):**
+- Fotos de evidencia: sigue pendiente la política de privacidad de EPM (sección 10). El
+  usuario decidió avanzar en diseño de todos modos más adelante, entendiendo que el
+  interruptor `MOSTRAR_FOTOS` no sustituye la decisión de privacidad — solo oculta en pantalla,
+  no impide que el archivo sea descargable del repo si llega a subirse.
+- Restricción de acceso al tablero en vivo (contraseña simple): evaluada, descartada por ahora
+  para esta ronda.
+
+## 13. Convenciones acordadas
 
 - Nombres de archivo: minúsculas, sin tildes, sin espacios (evita romper GitHub Pages, que
   es case-sensitive, a diferencia de Windows).
