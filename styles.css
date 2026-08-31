@@ -368,7 +368,7 @@ footer.pie {
   gap: 16px;
   border-bottom: 2px solid var(--color-marca);
   padding-bottom: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 .reporte-logo { height: 50px; width: auto; }
 .reporte-cabecera h1 { margin: 0 0 4px; font-size: 1.3rem; color: var(--color-primario-oscuro); }
@@ -376,33 +376,32 @@ footer.pie {
 .reporte-filtros,
 .reporte-rango { font-weight: 600; color: var(--color-texto); }
 
-.reporte-resumen {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  margin-bottom: 20px;
-  font-size: 0.85rem;
-}
-.reporte-resumen strong { font-size: 1.15rem; display: block; }
-
-.reporte-graficos {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.reporte-grafico-img {
-  max-width: 45%;
-  border: 1px solid var(--color-borde);
-  border-radius: 6px;
-}
-
-.reporte-registros h2 {
+.reporte-impresion h2 {
   font-size: 1rem;
   color: var(--color-primario-oscuro);
   border-bottom: 1px solid var(--color-borde);
   padding-bottom: 4px;
-  margin-bottom: 10px;
+  margin: 0 0 10px;
+}
+.reporte-impresion section { margin-bottom: 22px; }
+
+.reporte-resumen-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  font-size: 0.85rem;
+}
+.reporte-resumen-grid strong { font-size: 1.15rem; display: block; }
+
+.reporte-graficos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.reporte-grafico-img {
+  max-width: 46%;
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
 }
 
 .reporte-tabla-resumida { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -414,15 +413,38 @@ footer.pie {
 }
 .reporte-tabla-resumida th { background: #eef1f6; }
 
+/* Cada registro es su propia "tarjeta": borde completo + franja de color a la izquierda
+   (según semáforo) + fondo tenue, para que el límite entre un registro y el siguiente sea
+   inconfundible incluso leyendo la hoja impresa rápido (Tarea K). break-inside/page-break-
+   inside "avoid" evita que un registro se corte a la mitad entre dos páginas, pero — a
+   propósito — NO hay ningún page-break-after aquí: varios registros cortos deben poder
+   compartir una misma página y fluir de forma natural; solo se salta de página cuando el
+   registro realmente no cabe completo en el espacio restante. El modelo de caja se mantiene
+   simple a propósito (sin márgenes negativos ni "sangrado") porque ese tipo de trucos de CSS
+   confunde el cálculo de paginación de Chromium y termina forzando saltos de página
+   innecesarios — la causa más probable de las hojas casi vacías reportadas. */
 .reporte-registro {
   border: 1px solid var(--color-borde);
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  break-inside: avoid;
+  border-left: 5px solid var(--color-texto-suave);
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin: 0 0 18px;
+  background: #f8fafb;
+  break-inside: avoid-page;
   page-break-inside: avoid;
 }
-.reporte-registro-cabecera { margin-bottom: 6px; font-size: 0.9rem; }
+.reporte-registro.verde { border-left-color: var(--color-verde); }
+.reporte-registro.amarillo { border-left-color: var(--color-amarillo); }
+.reporte-registro.rojo { border-left-color: var(--color-rojo); }
+.reporte-registro.sin_dato { border-left-color: var(--color-sin-dato); }
+
+.reporte-registro-cabecera {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-borde);
+}
+.reporte-registro-titulo { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
+.reporte-registro-meta-linea { font-size: 0.82rem; color: var(--color-texto-suave); }
 
 @media print {
   * {
