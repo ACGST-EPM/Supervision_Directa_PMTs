@@ -392,12 +392,33 @@
     return ESTADO.funcionarios.find((f) => normStr(f.numero_registro) === clave) || null;
   }
 
+  // Busca un funcionario cuyo campo opcional `variantes_implementacion` (sección 12,
+  // Tarea G) incluya el texto crudo que llega en Implementación. Permite que la misma
+  // persona, registrada con nombres distintos en Rutinarios (número) e Implementación
+  // (texto libre), se muestre y se filtre como una sola entidad. Comparación insensible
+  // a mayúsculas/espacios sobrantes; si no hay coincidencia, el llamador muestra el texto
+  // crudo tal cual, como antes.
+  function funcionarioPorVariante(textoCrudo) {
+    const clave = normStr(textoCrudo).toLowerCase();
+    if (!clave) return null;
+    return ESTADO.funcionarios.find((f) =>
+      Array.isArray(f.variantes_implementacion) &&
+      f.variantes_implementacion.some((v) => normStr(v).toLowerCase() === clave)
+    ) || null;
+  }
+
   // Texto a mostrar para "diligenciado por". En Rutinarios llega como número de registro
   // de SharePoint y se resuelve contra funcionarios.json; en Implementación ya llega como
-  // nombre de texto y se muestra tal cual (ver sección 6 de CONTEXTO_PROYECTO.md).
+  // nombre de texto (ver sección 6 de CONTEXTO_PROYECTO.md). Si ese texto coincide con una
+  // variante conocida de un funcionario (funcionarios.json → variantes_implementacion), se
+  // muestra unificado como "Nombre — Cargo", igual que en Rutinarios; si no hay
+  // coincidencia, se muestra el texto crudo tal cual.
   function textoDiligenciadoPor(registro) {
     if (registro.tipo !== 'rutinario') {
-      return normStr(registro.diligenciado_por) || 'Sin dato';
+      const crudo = normStr(registro.diligenciado_por);
+      if (!crudo) return 'Sin dato';
+      const f = funcionarioPorVariante(crudo);
+      return f ? `${f.nombre} — ${f.cargo}` : crudo;
     }
     const numero = normalizarNumeroFuncionario(registro.diligenciado_por);
     if (!numero) return 'Sin dato';
@@ -698,6 +719,129 @@
     }).join('');
   }
 
+  // --- Reporte imprimible (Tarea F, sección 12) ---
+
+  // Texto legible de los filtros activos (menos fechas, que van aparte en
+  // formatearRangoFechas) para dejar constancia en el encabezado del reporte de qué se
+  // está mostrando.
+  function formatearFiltrosActivos() {
+    const f = ESTADO.filtro;
+    const etiquetaTipo = f.tipo === 'todos' ? 'Todos' : (f.tipo === 'rutinario' ? 'Rutinarios' : 'Puesta en Operación (PO)');
+    let etiquetaContrato = 'Todos';
+    if (f.contrato !== 'todos') {
+      const info = contratoInfo(f.contrato);
+      etiquetaContrato = info ? `${f.contrato} · ${info.proyecto}` : f.contrato;
+    }
+    const partes = [
+      `Tipo: ${etiquetaTipo}`,
+      `Contrato: ${etiquetaContrato}`,
+      `Frente: ${f.frente === 'todos' ? 'Todos' : f.frente}`,
+      `Diligenciado por: ${f.diligenciado_por === 'todos' ? 'Todos' : f.diligenciado_por}`,
+      `Semáforo: ${f.semaforo === 'todos' ? 'Todos' : ETIQUETAS_SEMAFORO[f.semaforo]}`,
+    ];
+    if (f.texto.trim()) partes.push(`Búsqueda: "${f.texto.trim()}"`);
+    return partes.join(' · ');
+  }
+
+  function formatearRangoFechas() {
+    const f = ESTADO.filtro;
+    if (!f.desde && !f.hasta) return 'Rango de fechas: sin definir (todas las fechas disponibles)';
+    return `Rango de fechas: ${f.desde || '(sin definir)'} a ${f.hasta || '(sin definir)'}`;
+  }
+
+  // Detalle completo por registro solo cuando el usuario definió AMBAS fechas y el rango
+  // es acotado (8 días o menos) — evita un reporte enorme si el rango es amplio o abierto.
+  function rangoParaDetalle() {
+    const f = ESTADO.filtro;
+    if (!f.desde || !f.hasta) return false;
+    const dias = Math.round((new Date(`${f.hasta}T00:00:00`) - new Date(`${f.desde}T00:00:00`)) / 86400000);
+    return dias >= 0 && dias <= 8;
+  }
+
+  function construirReporteImpresion() {
+    const lista = registrosFiltrados().slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const detallado = rangoParaDetalle();
+
+    const conteos = { verde: 0, amarillo: 0, rojo: 0, sin_dato: 0 };
+    lista.forEach((r) => { conteos[r.semaforo]++; });
+    const conPuntaje = lista.filter((r) => r.puntaje !== null);
+    const promedio = conPuntaje.length
+      ? Math.round((conPuntaje.reduce((s, r) => s + r.puntaje, 0) / conPuntaje.length) * 10) / 10
+      : null;
+
+    // Los gráficos viven en <canvas> del tablero en pantalla, que se oculta al imprimir.
+    // Se convierten a imagen (toBase64Image) para insertarlos como <img> dentro del
+    // reporte, que sí queda visible en @media print.
+    const imgSemaforo = chartSemaforo ? chartSemaforo.toBase64Image() : '';
+    const imgTendencia = chartTendencia ? chartTendencia.toBase64Image() : '';
+
+    const filasHtml = detallado
+      ? lista.map((r) => `
+          <div class="reporte-registro">
+            <div class="reporte-registro-cabecera">
+              <strong>${escapeHtml(r.fecha || '—')}</strong> ·
+              ${r.tipo === 'rutinario' ? 'Rutinario' : 'PO'} ·
+              Contrato ${escapeHtml(r.contrato || '—')} ·
+              Frente ${escapeHtml(r.frente || '—')} ·
+              Puntaje ${r.puntaje === null ? '—' : `${r.puntaje}%`} ·
+              <span class="badge ${r.semaforo}">${ETIQUETAS_SEMAFORO[r.semaforo]}</span>
+              ${renderNotas(r)}
+            </div>
+            ${renderDetalle(r)}
+          </div>
+        `).join('')
+      : `<table class="reporte-tabla-resumida">
+          <thead>
+            <tr><th>Fecha</th><th>Tipo</th><th>Contrato</th><th>Frente</th><th>Puntaje</th><th>Semáforo</th></tr>
+          </thead>
+          <tbody>
+            ${lista.map((r) => `
+              <tr>
+                <td>${escapeHtml(r.fecha || '—')}</td>
+                <td>${r.tipo === 'rutinario' ? 'Rutinario' : 'PO'}</td>
+                <td>${escapeHtml(r.contrato || '—')}</td>
+                <td>${escapeHtml(r.frente || '—')}</td>
+                <td>${r.puntaje === null ? '—' : `${r.puntaje}%`}</td>
+                <td><span class="badge ${r.semaforo}">${ETIQUETAS_SEMAFORO[r.semaforo]}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+
+    const cont = document.getElementById('reporte-impresion');
+    cont.innerHTML = `
+      <header class="reporte-cabecera">
+        <img src="LogoEPM.png" alt="Logo EPM" class="reporte-logo">
+        <div>
+          <h1>Tablero de Seguimiento PMTs — Reporte</h1>
+          <p>Generado el ${escapeHtml(new Date().toLocaleString('es-CO'))}</p>
+          <p class="reporte-rango">${escapeHtml(formatearRangoFechas())}</p>
+          <p class="reporte-filtros">${escapeHtml(formatearFiltrosActivos())}</p>
+        </div>
+      </header>
+      <section class="reporte-resumen">
+        <div><strong>${lista.length}</strong>Registros filtrados</div>
+        <div><strong>${promedio === null ? '—' : `${promedio}%`}</strong>Puntaje promedio</div>
+        <div><strong>${conteos.verde}</strong>En verde (cumple)</div>
+        <div><strong>${conteos.amarillo}</strong>En amarillo (por mejorar)</div>
+        <div><strong>${conteos.rojo}</strong>En rojo (crítico)</div>
+      </section>
+      <section class="reporte-graficos">
+        ${imgSemaforo ? `<img src="${imgSemaforo}" alt="Distribución por semáforo" class="reporte-grafico-img">` : ''}
+        ${imgTendencia ? `<img src="${imgTendencia}" alt="Evolución del cumplimiento" class="reporte-grafico-img">` : ''}
+      </section>
+      <section class="reporte-registros">
+        <h2>Registros (${detallado ? 'detalle completo — rango de 8 días o menos' : 'resumen por fila'})</h2>
+        ${lista.length ? filasHtml : '<p class="sin-datos">No hay registros para los filtros seleccionados.</p>'}
+      </section>
+    `;
+  }
+
+  function generarReporte() {
+    construirReporteImpresion();
+    window.print();
+  }
+
   // --- Filtros: selects dinámicos ---
 
   function poblarFiltroContratos() {
@@ -779,6 +923,8 @@
       leerFiltrosDesdeUI();
       renderizarTodo();
     });
+
+    document.getElementById('btn-generar-reporte').addEventListener('click', generarReporte);
 
     document.getElementById('cuerpo-tabla').addEventListener('click', (ev) => {
       const miniatura = ev.target.closest('.foto-miniatura');

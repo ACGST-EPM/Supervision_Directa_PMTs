@@ -83,6 +83,18 @@
     </div>
   </section>
 
+  <section id="seccion-reporte" aria-label="Reporte">
+    <div class="acciones-reporte">
+      <button type="button" id="btn-generar-reporte">Generar reporte</button>
+      <p class="reporte-ayuda">
+        Genera una vista de impresión con los registros que cumplen los filtros activos.
+        Si el rango "Desde"/"Hasta" está definido y es de 8 días o menos, cada registro se
+        imprime con su checklist completo; en cualquier otro caso, se imprime un resumen
+        por fila.
+      </p>
+    </div>
+  </section>
+
   <section id="seccion-graficos-dinamicos" aria-label="Gráficos dinámicos">
     <h2>Gráficos dinámicos</h2>
     <div class="graficos-dinamicos">
@@ -141,6 +153,11 @@
   <button type="button" class="lightbox-cerrar" id="lightbox-cerrar" aria-label="Cerrar">&times;</button>
   <img id="lightbox-img" src="" alt="Foto de evidencia ampliada">
 </div>
+
+<!-- Vista de impresión (Tarea F, sección 12): oculta en pantalla, generada por app.js
+     justo antes de window.print(). Vive fuera de <main> para que @media print pueda
+     ocultar TODO lo demás (filtros, botones, tabla en pantalla) y mostrar solo esto. -->
+<div class="reporte-impresion" id="reporte-impresion"></div>
 
 <!-- Scripts clásicos (sin type="module"), en orden de dependencia: -->
 <script src="config.js"></script>

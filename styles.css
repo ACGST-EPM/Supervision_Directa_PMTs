@@ -129,6 +129,32 @@ h2 {
 }
 #btn-limpiar-filtros:hover { background: #eef3fa; }
 
+/* --- Acciones / reporte (Tarea F, sección 12) --- */
+.acciones-reporte {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: var(--sombra);
+}
+#btn-generar-reporte {
+  padding: 8px 16px;
+  border: none;
+  background: var(--color-marca);
+  color: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+#btn-generar-reporte:hover { background: var(--color-primario-oscuro); }
+.reporte-ayuda { margin: 0; font-size: 0.8rem; color: var(--color-texto-suave); }
+
 /* --- Gráficos dinámicos (torta semáforo + línea de tendencia) --- */
 .graficos-dinamicos {
   display: grid;
@@ -328,4 +354,89 @@ footer.pie {
 @media (max-width: 640px) {
   table.tabla-registros { min-width: 680px; }
   .barra-contrato { grid-template-columns: 100px 1fr 40px; }
+}
+
+/* --- Reporte imprimible (Tarea F, sección 12) ---
+   El contenedor está oculto en pantalla (display:none) y solo se muestra dentro de
+   @media print, momento en el que se oculta todo lo demás (filtros, botones, tabla en
+   pantalla) para que en el PDF/impresión solo aparezca el reporte generado por app.js. */
+.reporte-impresion { display: none; }
+
+.reporte-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid var(--color-marca);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+.reporte-logo { height: 50px; width: auto; }
+.reporte-cabecera h1 { margin: 0 0 4px; font-size: 1.3rem; color: var(--color-primario-oscuro); }
+.reporte-cabecera p { margin: 2px 0; font-size: 0.85rem; color: var(--color-texto-suave); }
+.reporte-filtros,
+.reporte-rango { font-weight: 600; color: var(--color-texto); }
+
+.reporte-resumen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+}
+.reporte-resumen strong { font-size: 1.15rem; display: block; }
+
+.reporte-graficos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.reporte-grafico-img {
+  max-width: 45%;
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
+}
+
+.reporte-registros h2 {
+  font-size: 1rem;
+  color: var(--color-primario-oscuro);
+  border-bottom: 1px solid var(--color-borde);
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+}
+
+.reporte-tabla-resumida { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.reporte-tabla-resumida th,
+.reporte-tabla-resumida td {
+  border: 1px solid var(--color-borde);
+  padding: 6px 8px;
+  text-align: left;
+}
+.reporte-tabla-resumida th { background: #eef1f6; }
+
+.reporte-registro {
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.reporte-registro-cabecera { margin-bottom: 6px; font-size: 0.9rem; }
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body > header.cabecera,
+  body > main,
+  body > footer.pie,
+  .lightbox-overlay {
+    display: none !important;
+  }
+  .reporte-impresion {
+    display: block !important;
+  }
+  @page { margin: 1.5cm; }
 }

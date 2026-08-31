@@ -1,5 +1,15 @@
 [
-  { "numero_registro": "119011", "nombre": "Sergio Ochoa", "cargo": "Profesional C" },
-  { "numero_registro": "118995", "nombre": "Leydi Marín", "cargo": "Profesional C" },
+  {
+    "numero_registro": "119011",
+    "nombre": "Sergio Ochoa",
+    "cargo": "Profesional C",
+    "variantes_implementacion": ["Sergio Ochoa Jiménez"]
+  },
+  {
+    "numero_registro": "118995",
+    "nombre": "Leydi Marín",
+    "cargo": "Profesional C",
+    "variantes_implementacion": ["Leydi Johana Marín Zapata"]
+  },
   { "numero_registro": "117227", "nombre": "Julián Sánchez", "cargo": "Profesional A" }
 ]
