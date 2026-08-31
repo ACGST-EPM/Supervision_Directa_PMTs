@@ -19,6 +19,7 @@
 <main>
 
   <p id="aviso-duplicados" class="aviso-duplicados" hidden></p>
+  <p id="aviso-sin-dato" class="aviso-duplicados" hidden></p>
 
   <section id="seccion-resumen" aria-label="Resumen">
     <h2>Resumen</h2>
@@ -51,6 +52,12 @@
         </select>
       </div>
       <div class="campo-filtro">
+        <label for="filtro-diligenciado-por">Diligenciado por</label>
+        <select id="filtro-diligenciado-por">
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+      <div class="campo-filtro">
         <label for="filtro-semaforo">Semáforo</label>
         <select id="filtro-semaforo">
           <option value="todos">Todos</option>
@@ -73,6 +80,20 @@
         <input type="text" id="filtro-texto" placeholder="Ej. Envigado, señalización...">
       </div>
       <button type="button" id="btn-limpiar-filtros">Limpiar filtros</button>
+    </div>
+  </section>
+
+  <section id="seccion-graficos-dinamicos" aria-label="Gráficos dinámicos">
+    <h2>Gráficos dinámicos</h2>
+    <div class="graficos-dinamicos">
+      <div class="grafico-tarjeta">
+        <h3>Distribución por semáforo</h3>
+        <canvas id="grafico-semaforo" role="img" aria-label="Gráfico de torta con la cantidad de registros filtrados en cada categoría de semáforo"></canvas>
+      </div>
+      <div class="grafico-tarjeta">
+        <h3>Evolución del cumplimiento</h3>
+        <canvas id="grafico-tendencia" role="img" aria-label="Gráfico de línea con el porcentaje de cumplimiento promedio por fecha"></canvas>
+      </div>
     </div>
   </section>
 
@@ -124,6 +145,7 @@
 <!-- Scripts clásicos (sin type="module"), en orden de dependencia: -->
 <script src="config.js"></script>
 <script src="modelo.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

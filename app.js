@@ -143,9 +143,22 @@
     registros: [],
     fuente: { rutinarios: '', implementacion: '' },
     duplicadosIgnorados: { rutinarios: 0, implementacion: 0 },
+    ocultosSinDato: 0,
     filas_expandidas: new Set(),
-    filtro: { tipo: 'todos', contrato: 'todos', frente: 'todos', semaforo: 'todos', texto: '', desde: '', hasta: '' },
+    filtro: { tipo: 'todos', contrato: 'todos', frente: 'todos', diligenciado_por: 'todos', semaforo: 'todos', texto: '', desde: '', hasta: '' },
   };
+
+  // Instancias de Chart.js (una sola cada una, se actualizan en lugar de recrearse en
+  // cada render para que las transiciones sean suaves y no haya fugas de memoria).
+  let chartSemaforo = null;
+  let chartTendencia = null;
+
+  // Colores oficiales del semáforo (sección 11 de CONTEXTO_PROYECTO.md). Se repiten aquí,
+  // en vez de leerlos de las variables CSS, porque Chart.js dibuja en un <canvas> y no
+  // resuelve custom properties de CSS automáticamente.
+  const COLOR_CHART_VERDE = '#00a950';
+  const COLOR_CHART_AMARILLO = '#d5c700';
+  const COLOR_CHART_ROJO = '#d56b00';
 
   function escapeHtml(valor) {
     return String(valor == null ? '' : valor)
@@ -401,6 +414,7 @@
       if (f.tipo !== 'todos' && r.tipo !== f.tipo) return false;
       if (f.contrato !== 'todos' && r.contrato !== f.contrato) return false;
       if (f.frente !== 'todos' && normStr(r.frente) !== f.frente) return false;
+      if (f.diligenciado_por !== 'todos' && textoDiligenciadoPor(r) !== f.diligenciado_por) return false;
       if (f.semaforo !== 'todos' && r.semaforo !== f.semaforo) return false;
       if (f.desde && r.fecha && r.fecha < f.desde) return false;
       if (f.hasta && r.fecha && r.fecha > f.hasta) return false;
@@ -409,6 +423,7 @@
         const bolsa = [
           r.direccion, r.observaciones, textoDiligenciadoPor(r), r.contrato,
           info ? info.proyecto : '', info ? info.contratista : '',
+          info && info.municipios ? info.municipios.join(' ') : '',
         ].join(' ').toLowerCase();
         if (!bolsa.includes(texto)) return false;
       }
@@ -430,6 +445,22 @@
     cont.textContent = `⚠ Se detectaron ${total} registro(s) duplicado(s) (mismo contrato + frente + fecha). ` +
       `Se conservó el envío más reciente de cada uno y se descartó el resto ` +
       `(Rutinarios: ${ESTADO.duplicadosIgnorados.rutinarios}, Implementación: ${ESTADO.duplicadosIgnorados.implementacion}).`;
+  }
+
+  // --- Render: aviso de registros "Sin dato" ocultados (sección 12) ---
+
+  function renderAvisoSinDato() {
+    const cont = document.getElementById('aviso-sin-dato');
+    const total = ESTADO.ocultosSinDato;
+    if (total <= 0) {
+      cont.hidden = true;
+      cont.textContent = '';
+      return;
+    }
+    cont.hidden = false;
+    cont.textContent = `⚠ ${total} registro(s) sin ningún dato de checklist fueron ocultados ` +
+      `(no se cuentan en la tabla, el resumen ni los gráficos). No se muestran los registros ` +
+      `"Incompleto" (falta un lado del formulario) — esos siguen siempre visibles.`;
   }
 
   // --- Render: resumen KPI ---
@@ -491,6 +522,77 @@
         <div class="barra-valor">${f.promedio}%</div>
       </div>
     `).join('');
+  }
+
+  // --- Render: gráficos dinámicos (Chart.js) — reaccionan a los mismos filtros que la
+  // tabla, porque reciben la misma `lista` ya filtrada por registrosFiltrados(). ---
+
+  function renderGraficoSemaforo(lista) {
+    const canvas = document.getElementById('grafico-semaforo');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const conteos = { verde: 0, amarillo: 0, rojo: 0 };
+    lista.forEach((r) => { if (conteos.hasOwnProperty(r.semaforo)) conteos[r.semaforo]++; });
+    const etiquetas = [ETIQUETAS_SEMAFORO.verde, ETIQUETAS_SEMAFORO.amarillo, ETIQUETAS_SEMAFORO.rojo];
+    const datos = [conteos.verde, conteos.amarillo, conteos.rojo];
+    const colores = [COLOR_CHART_VERDE, COLOR_CHART_AMARILLO, COLOR_CHART_ROJO];
+
+    if (chartSemaforo) {
+      chartSemaforo.data.datasets[0].data = datos;
+      chartSemaforo.update();
+      return;
+    }
+    chartSemaforo = new Chart(canvas, {
+      type: 'pie',
+      data: { labels: etiquetas, datasets: [{ data: datos, backgroundColor: colores }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+    });
+  }
+
+  function renderGraficoTendencia(lista) {
+    const canvas = document.getElementById('grafico-tendencia');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const porFecha = new Map();
+    lista.forEach((r) => {
+      if (r.puntaje === null || !r.fecha) return;
+      if (!porFecha.has(r.fecha)) porFecha.set(r.fecha, []);
+      porFecha.get(r.fecha).push(r.puntaje);
+    });
+    const fechas = Array.from(porFecha.keys()).sort();
+    const valores = fechas.map((fecha) => {
+      const puntajes = porFecha.get(fecha);
+      return Math.round((puntajes.reduce((s, v) => s + v, 0) / puntajes.length) * 10) / 10;
+    });
+
+    if (chartTendencia) {
+      chartTendencia.data.labels = fechas;
+      chartTendencia.data.datasets[0].data = valores;
+      chartTendencia.update();
+      return;
+    }
+    chartTendencia = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: fechas,
+        datasets: [{
+          label: '% de cumplimiento promedio',
+          data: valores,
+          borderColor: COLOR_CHART_VERDE,
+          backgroundColor: COLOR_CHART_VERDE,
+          tension: 0.2,
+          spanGaps: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        scales: { y: { min: 0, max: 100, ticks: { callback: (v) => `${v}%` } } },
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+
+  function renderGraficosDinamicos(lista) {
+    renderGraficoSemaforo(lista);
+    renderGraficoTendencia(lista);
   }
 
   // --- Render: tabla y detalle ---
@@ -620,11 +722,23 @@
     select.innerHTML = opciones.join('');
   }
 
+  // Distintos valores de "diligenciado por" ya resueltos (nombre vía funcionarios.json,
+  // o valor crudo si no hay coincidencia) — igual que se muestra en la tabla/detalle.
+  function poblarFiltroDiligenciadoPor() {
+    const select = document.getElementById('filtro-diligenciado-por');
+    const actuales = new Set(ESTADO.registros.map((r) => textoDiligenciadoPor(r)).filter(Boolean));
+    const opciones = ['<option value="todos">Todos</option>'].concat(
+      Array.from(actuales).sort().map((valor) => `<option value="${escapeHtml(valor)}">${escapeHtml(valor)}</option>`)
+    );
+    select.innerHTML = opciones.join('');
+  }
+
   function leerFiltrosDesdeUI() {
     ESTADO.filtro = {
       tipo: document.getElementById('filtro-tipo').value,
       contrato: document.getElementById('filtro-contrato').value,
       frente: document.getElementById('filtro-frente').value,
+      diligenciado_por: document.getElementById('filtro-diligenciado-por').value,
       semaforo: document.getElementById('filtro-semaforo').value,
       texto: document.getElementById('filtro-texto').value,
       desde: document.getElementById('filtro-desde').value,
@@ -636,13 +750,14 @@
     const lista = registrosFiltrados();
     renderResumen(lista);
     renderGrafico(lista);
+    renderGraficosDinamicos(lista);
     renderTabla(lista);
   }
 
   // --- Eventos ---
 
   function wireEventos() {
-    ['filtro-tipo', 'filtro-contrato', 'filtro-frente', 'filtro-semaforo', 'filtro-desde', 'filtro-hasta'].forEach((id) => {
+    ['filtro-tipo', 'filtro-contrato', 'filtro-frente', 'filtro-diligenciado-por', 'filtro-semaforo', 'filtro-desde', 'filtro-hasta'].forEach((id) => {
       document.getElementById(id).addEventListener('change', () => {
         leerFiltrosDesdeUI();
         renderizarTodo();
@@ -656,6 +771,7 @@
       document.getElementById('filtro-tipo').value = 'todos';
       document.getElementById('filtro-contrato').value = 'todos';
       document.getElementById('filtro-frente').value = 'todos';
+      document.getElementById('filtro-diligenciado-por').value = 'todos';
       document.getElementById('filtro-semaforo').value = 'todos';
       document.getElementById('filtro-texto').value = '';
       document.getElementById('filtro-desde').value = '';
@@ -729,19 +845,35 @@
       implementacion: fusionImp.duplicadosIgnorados,
     };
 
-    ESTADO.registros = [
+    const todosLosRegistros = [
       ...dedupRut.registros.map((row) => mapearRegistro(row, 'rutinario', PESOS_RUT)),
       ...fusionImp.registros.map((row) => mapearRegistro(row, 'po', PESOS_PO)),
     ];
+
+    // Sección 12: ocultar registros "Sin dato" (ningún ítem del checklist respondido).
+    // Distinto de "Incompleto" (falta un lado del formulario en Implementación), que debe
+    // seguir siendo visible siempre aunque también tenga semaforo === 'sin_dato' — por eso
+    // se excluye solo cuando NO está marcado como incompleto.
+    let ocultosSinDato = 0;
+    ESTADO.registros = todosLosRegistros.filter((r) => {
+      if (r.semaforo === 'sin_dato' && !r.incompleto) {
+        ocultosSinDato++;
+        return false;
+      }
+      return true;
+    });
+    ESTADO.ocultosSinDato = ocultosSinDato;
 
     document.getElementById('fuente-datos').textContent =
       `Rutinarios: ${ESTADO.fuente.rutinarios} · Implementación (PO): ${ESTADO.fuente.implementacion}`;
 
     poblarFiltroContratos();
     poblarFiltroFrentes();
+    poblarFiltroDiligenciadoPor();
     leerFiltrosDesdeUI();
     wireEventos();
     renderAvisoDuplicados();
+    renderAvisoSinDato();
     renderizarTodo();
   }
 
