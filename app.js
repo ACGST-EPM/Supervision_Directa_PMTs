@@ -1004,6 +1004,50 @@
     `;
   }
 
+  // Causa real encontrada con la instrumentación de diagnóstico (sección 12): las imágenes
+  // de los gráficos SÍ se capturaban con contenido real (toBase64Image devolvía un data URL
+  // largo, no el de una imagen en blanco), pero entre asignarlo al `src` del <img> del
+  // reporte y llamar a window.print() pasaban menos de 6ms — el navegador no alcanza a
+  // decodificar/pintar la imagen nueva antes de que arranque la impresión, así que sale en
+  // blanco en el PDF aunque el dato ya era correcto. Se espera explícitamente a que cada
+  // <img> confirme que terminó de decodificar (img.decode(), con el evento 'load' como
+  // respaldo si decode() no está disponible o falla) antes de imprimir.
+  async function esperarImagenesReporte() {
+    const imgs = Array.from(document.querySelectorAll('#reporte-impresion .reporte-grafico-img'));
+    diagLog('esperarImagenesReporte: imágenes a esperar', { cantidad: imgs.length });
+    await Promise.all(imgs.map((img) => {
+      const etiqueta = img.alt || img.className;
+      if (typeof img.decode === 'function') {
+        return img.decode()
+          .then(() => diagLog(`esperarImagenesReporte: decode() resuelto — "${etiqueta}"`, { naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight }))
+          .catch((err) => {
+            diagLog(`esperarImagenesReporte: decode() falló — "${etiqueta}", uso evento load como respaldo`, { error: String(err) });
+            return new Promise((resolve) => {
+              img.addEventListener('load', () => {
+                diagLog(`esperarImagenesReporte: evento load (respaldo) — "${etiqueta}"`, { naturalWidth: img.naturalWidth });
+                resolve();
+              }, { once: true });
+              img.addEventListener('error', () => {
+                diagLog(`esperarImagenesReporte: evento error (respaldo) — "${etiqueta}"`);
+                resolve();
+              }, { once: true });
+            });
+          });
+      }
+      // Navegadores muy viejos sin img.decode(): usar directamente el evento 'load'.
+      return new Promise((resolve) => {
+        img.addEventListener('load', () => {
+          diagLog(`esperarImagenesReporte: evento load — "${etiqueta}"`, { naturalWidth: img.naturalWidth });
+          resolve();
+        }, { once: true });
+        img.addEventListener('error', () => {
+          diagLog(`esperarImagenesReporte: evento error — "${etiqueta}"`);
+          resolve();
+        }, { once: true });
+      });
+    }));
+  }
+
   async function generarReporte() {
     diagLog('generarReporte: clic recibido, empieza a esperar Promise.all');
     // Tarea L: esperar a que Chart.js confirme (vía animation.onComplete) que el último
@@ -1013,7 +1057,9 @@
     await Promise.all([chartSemaforoListo, chartTendenciaListo]);
     diagLog('generarReporte: Promise.all resuelto, construyendo el reporte');
     construirReporteImpresion();
-    diagLog('generarReporte: reporte construido, llamando a window.print()');
+    diagLog('generarReporte: reporte construido, esperando a que las <img> terminen de decodificar');
+    await esperarImagenesReporte();
+    diagLog('generarReporte: imágenes listas, llamando a window.print()');
     window.print();
   }
 
