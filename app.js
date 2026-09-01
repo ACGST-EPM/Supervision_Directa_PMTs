@@ -167,6 +167,23 @@
   let chartTendenciaListo = Promise.resolve();
   let resolverChartSemaforoListo = null;
   let resolverChartTendenciaListo = null;
+  // Instrumentación: cantidad de fechas distintas del render MÁS RECIENTE del gráfico de
+  // línea. onComplete queda registrado una sola vez (en el primer new Chart()), así que si
+  // leyera `fechas.length` directo del cierre, reportaría siempre el valor de esa primera
+  // vez — esta variable se actualiza en cada llamada para que onComplete lea el dato real
+  // del render que efectivamente terminó.
+  let ultimaCantidadFechasTendencia = 0;
+
+  // ------------------------------------------------------------------------------------
+  // INSTRUMENTACIÓN TEMPORAL DE DIAGNÓSTICO — gráficos en blanco en reportes de rango
+  // largo (sección 12). NO es una corrección, es solo para dejar un registro exacto de
+  // qué pasó paso a paso la próxima vez que se reproduzca en el sitio publicado. Cada
+  // línea sale con el prefijo "[DIAG-REPORTE]" para poder filtrarla fácil en la consola;
+  // quitar este bloque y sus llamadas (buscar "diagLog(") una vez resuelto el problema.
+  function diagLog(evento, detalle) {
+    const marca = (typeof performance !== 'undefined' && performance.now) ? performance.now().toFixed(1) : '?';
+    console.log(`[DIAG-REPORTE] ${marca}ms | ${new Date().toISOString()} | ${evento}`, detalle !== undefined ? detalle : '');
+  }
 
   // Colores oficiales del semáforo (sección 11 de CONTEXTO_PROYECTO.md). Se repiten aquí,
   // en vez de leerlos de las variables CSS, porque Chart.js dibuja en un <canvas> y no
@@ -574,7 +591,11 @@
 
   function renderGraficoSemaforo(lista) {
     const canvas = document.getElementById('grafico-semaforo');
-    if (!canvas || typeof Chart === 'undefined') { chartSemaforoListo = Promise.resolve(); return; }
+    if (!canvas || typeof Chart === 'undefined') {
+      diagLog('renderGraficoSemaforo: SALIDA TEMPRANA (canvas ausente o Chart.js no cargó)', { canvasExiste: !!canvas, chartDefinido: typeof Chart !== 'undefined' });
+      chartSemaforoListo = Promise.resolve();
+      return;
+    }
     const conteos = { verde: 0, amarillo: 0, rojo: 0 };
     lista.forEach((r) => { if (conteos.hasOwnProperty(r.semaforo)) conteos[r.semaforo]++; });
     const etiquetas = [ETIQUETAS_SEMAFORO.verde, ETIQUETAS_SEMAFORO.amarillo, ETIQUETAS_SEMAFORO.rojo];
@@ -587,10 +608,12 @@
     chartSemaforoListo = new Promise((resolve) => { resolverChartSemaforoListo = resolve; });
 
     if (chartSemaforo) {
+      diagLog('renderGraficoSemaforo: chart.update() (ya existía)', { datos });
       chartSemaforo.data.datasets[0].data = datos;
       chartSemaforo.update();
       return;
     }
+    diagLog('renderGraficoSemaforo: new Chart() (primera vez)', { datos });
     chartSemaforo = new Chart(canvas, {
       type: 'pie',
       data: { labels: etiquetas, datasets: [{ data: datos, backgroundColor: colores }] },
@@ -603,7 +626,10 @@
         // promesa MÁS RECIENTE (ver arriba), así que esto resuelve exactamente el render
         // que estaba en curso cuando terminó — nunca uno viejo ya superado.
         animation: {
-          onComplete: () => { if (resolverChartSemaforoListo) resolverChartSemaforoListo(); },
+          onComplete: () => {
+            diagLog('renderGraficoSemaforo: animation.onComplete disparado');
+            if (resolverChartSemaforoListo) resolverChartSemaforoListo();
+          },
         },
       },
     });
@@ -611,7 +637,11 @@
 
   function renderGraficoTendencia(lista) {
     const canvas = document.getElementById('grafico-tendencia');
-    if (!canvas || typeof Chart === 'undefined') { chartTendenciaListo = Promise.resolve(); return; }
+    if (!canvas || typeof Chart === 'undefined') {
+      diagLog('renderGraficoTendencia: SALIDA TEMPRANA (canvas ausente o Chart.js no cargó)', { canvasExiste: !!canvas, chartDefinido: typeof Chart !== 'undefined' });
+      chartTendenciaListo = Promise.resolve();
+      return;
+    }
     const porFecha = new Map();
     lista.forEach((r) => {
       if (r.puntaje === null || !r.fecha) return;
@@ -625,13 +655,16 @@
     });
 
     chartTendenciaListo = new Promise((resolve) => { resolverChartTendenciaListo = resolve; });
+    ultimaCantidadFechasTendencia = fechas.length;
 
     if (chartTendencia) {
+      diagLog('renderGraficoTendencia: chart.update() (ya existía)', { fechasDistintas: fechas.length });
       chartTendencia.data.labels = fechas;
       chartTendencia.data.datasets[0].data = valores;
       chartTendencia.update();
       return;
     }
+    diagLog('renderGraficoTendencia: new Chart() (primera vez)', { fechasDistintas: fechas.length });
     chartTendencia = new Chart(canvas, {
       type: 'line',
       data: {
@@ -650,7 +683,10 @@
         scales: { y: { min: 0, max: 100, ticks: { callback: (v) => `${v}%` } } },
         plugins: { legend: { display: false } },
         animation: {
-          onComplete: () => { if (resolverChartTendenciaListo) resolverChartTendenciaListo(); },
+          onComplete: () => {
+            diagLog('renderGraficoTendencia: animation.onComplete disparado', { fechasDistintas: ultimaCantidadFechasTendencia });
+            if (resolverChartTendenciaListo) resolverChartTendenciaListo();
+          },
         },
       },
     });
@@ -873,7 +909,15 @@
     // ya garantizó (en generarReporte(), antes de llamar a esta función) que si los
     // gráficos SÍ cargaron, su animación ya terminó — nunca se capturan a medio dibujar.
     const imgSemaforo = chartSemaforo ? chartSemaforo.toBase64Image() : '';
+    diagLog('construirReporteImpresion: toBase64Image() capturado (torta)', {
+      chartExiste: !!chartSemaforo,
+      longitud: imgSemaforo.length,
+    });
     const imgTendencia = chartTendencia ? chartTendencia.toBase64Image() : '';
+    diagLog('construirReporteImpresion: toBase64Image() capturado (línea)', {
+      chartExiste: !!chartTendencia,
+      longitud: imgTendencia.length,
+    });
     const avisoGraficoNoDisponible = '<p class="sin-datos">Gráfico no disponible (no se pudo cargar la librería de gráficos).</p>';
 
     const filasHtml = detallado
@@ -961,12 +1005,15 @@
   }
 
   async function generarReporte() {
+    diagLog('generarReporte: clic recibido, empieza a esperar Promise.all');
     // Tarea L: esperar a que Chart.js confirme (vía animation.onComplete) que el último
     // render de cada gráfico ya terminó, antes de capturarlos como imagen. Si Chart.js
     // nunca llegó a cargar, ambas promesas ya están resueltas (ver renderGraficoSemaforo/
     // Tendencia) y este await no introduce ninguna espera.
     await Promise.all([chartSemaforoListo, chartTendenciaListo]);
+    diagLog('generarReporte: Promise.all resuelto, construyendo el reporte');
     construirReporteImpresion();
+    diagLog('generarReporte: reporte construido, llamando a window.print()');
     window.print();
   }
 
