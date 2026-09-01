@@ -143,9 +143,54 @@
     registros: [],
     fuente: { rutinarios: '', implementacion: '' },
     duplicadosIgnorados: { rutinarios: 0, implementacion: 0 },
+    ocultosSinDato: 0,
     filas_expandidas: new Set(),
-    filtro: { tipo: 'todos', contrato: 'todos', frente: 'todos', semaforo: 'todos', texto: '', desde: '', hasta: '' },
+    filtro: { tipo: 'todos', contrato: 'todos', contratista: 'todos', frente: 'todos', diligenciado_por: 'todos', semaforo: 'todos', texto: '', desde: '', hasta: '' },
   };
+
+  // Instancias de Chart.js (una sola cada una, se actualizan en lugar de recrearse en
+  // cada render para que las transiciones sean suaves y no haya fugas de memoria).
+  let chartSemaforo = null;
+  let chartTendencia = null;
+
+  // Tarea L (sección 12): Chart.js anima cada render/actualización (~1s por defecto) de
+  // forma asíncrona vía requestAnimationFrame — el <canvas> NO queda con el dibujo final
+  // completo en el mismo tick en que se llama a new Chart(...) o chart.update(). Capturar
+  // la imagen con toBase64Image() antes de que esa animación termine produce una imagen en
+  // blanco o a medio dibujar; el riesgo es mayor en producción, donde la latencia real de
+  // cargar Chart.js desde el CDN puede correr la creación del gráfico más cerca del momento
+  // en que el usuario hace clic en "Generar reporte". Estas promesas se resuelven en el
+  // callback options.animation.onComplete de cada gráfico (el evento que Chart.js dispara
+  // cuando el render/actualización realmente terminó) y generarReporte() las espera antes
+  // de capturar la imagen — nunca se asume que el gráfico ya está listo.
+  let chartSemaforoListo = Promise.resolve();
+  let chartTendenciaListo = Promise.resolve();
+  let resolverChartSemaforoListo = null;
+  let resolverChartTendenciaListo = null;
+  // Instrumentación: cantidad de fechas distintas del render MÁS RECIENTE del gráfico de
+  // línea. onComplete queda registrado una sola vez (en el primer new Chart()), así que si
+  // leyera `fechas.length` directo del cierre, reportaría siempre el valor de esa primera
+  // vez — esta variable se actualiza en cada llamada para que onComplete lea el dato real
+  // del render que efectivamente terminó.
+  let ultimaCantidadFechasTendencia = 0;
+
+  // ------------------------------------------------------------------------------------
+  // INSTRUMENTACIÓN TEMPORAL DE DIAGNÓSTICO — gráficos en blanco en reportes de rango
+  // largo (sección 12). NO es una corrección, es solo para dejar un registro exacto de
+  // qué pasó paso a paso la próxima vez que se reproduzca en el sitio publicado. Cada
+  // línea sale con el prefijo "[DIAG-REPORTE]" para poder filtrarla fácil en la consola;
+  // quitar este bloque y sus llamadas (buscar "diagLog(") una vez resuelto el problema.
+  function diagLog(evento, detalle) {
+    const marca = (typeof performance !== 'undefined' && performance.now) ? performance.now().toFixed(1) : '?';
+    console.log(`[DIAG-REPORTE] ${marca}ms | ${new Date().toISOString()} | ${evento}`, detalle !== undefined ? detalle : '');
+  }
+
+  // Colores oficiales del semáforo (sección 11 de CONTEXTO_PROYECTO.md). Se repiten aquí,
+  // en vez de leerlos de las variables CSS, porque Chart.js dibuja en un <canvas> y no
+  // resuelve custom properties de CSS automáticamente.
+  const COLOR_CHART_VERDE = '#00a950';
+  const COLOR_CHART_AMARILLO = '#d5c700';
+  const COLOR_CHART_ROJO = '#d56b00';
 
   function escapeHtml(valor) {
     return String(valor == null ? '' : valor)
@@ -379,12 +424,33 @@
     return ESTADO.funcionarios.find((f) => normStr(f.numero_registro) === clave) || null;
   }
 
+  // Busca un funcionario cuyo campo opcional `variantes_implementacion` (sección 12,
+  // Tarea G) incluya el texto crudo que llega en Implementación. Permite que la misma
+  // persona, registrada con nombres distintos en Rutinarios (número) e Implementación
+  // (texto libre), se muestre y se filtre como una sola entidad. Comparación insensible
+  // a mayúsculas/espacios sobrantes; si no hay coincidencia, el llamador muestra el texto
+  // crudo tal cual, como antes.
+  function funcionarioPorVariante(textoCrudo) {
+    const clave = normStr(textoCrudo).toLowerCase();
+    if (!clave) return null;
+    return ESTADO.funcionarios.find((f) =>
+      Array.isArray(f.variantes_implementacion) &&
+      f.variantes_implementacion.some((v) => normStr(v).toLowerCase() === clave)
+    ) || null;
+  }
+
   // Texto a mostrar para "diligenciado por". En Rutinarios llega como número de registro
   // de SharePoint y se resuelve contra funcionarios.json; en Implementación ya llega como
-  // nombre de texto y se muestra tal cual (ver sección 6 de CONTEXTO_PROYECTO.md).
+  // nombre de texto (ver sección 6 de CONTEXTO_PROYECTO.md). Si ese texto coincide con una
+  // variante conocida de un funcionario (funcionarios.json → variantes_implementacion), se
+  // muestra unificado como "Nombre — Cargo", igual que en Rutinarios; si no hay
+  // coincidencia, se muestra el texto crudo tal cual.
   function textoDiligenciadoPor(registro) {
     if (registro.tipo !== 'rutinario') {
-      return normStr(registro.diligenciado_por) || 'Sin dato';
+      const crudo = normStr(registro.diligenciado_por);
+      if (!crudo) return 'Sin dato';
+      const f = funcionarioPorVariante(crudo);
+      return f ? `${f.nombre} — ${f.cargo}` : crudo;
     }
     const numero = normalizarNumeroFuncionario(registro.diligenciado_por);
     if (!numero) return 'Sin dato';
@@ -400,7 +466,12 @@
     return ESTADO.registros.filter((r) => {
       if (f.tipo !== 'todos' && r.tipo !== f.tipo) return false;
       if (f.contrato !== 'todos' && r.contrato !== f.contrato) return false;
+      if (f.contratista !== 'todos') {
+        const info = contratoInfo(r.contrato);
+        if (!info || info.contratista !== f.contratista) return false;
+      }
       if (f.frente !== 'todos' && normStr(r.frente) !== f.frente) return false;
+      if (f.diligenciado_por !== 'todos' && textoDiligenciadoPor(r) !== f.diligenciado_por) return false;
       if (f.semaforo !== 'todos' && r.semaforo !== f.semaforo) return false;
       if (f.desde && r.fecha && r.fecha < f.desde) return false;
       if (f.hasta && r.fecha && r.fecha > f.hasta) return false;
@@ -409,6 +480,7 @@
         const bolsa = [
           r.direccion, r.observaciones, textoDiligenciadoPor(r), r.contrato,
           info ? info.proyecto : '', info ? info.contratista : '',
+          info && info.municipios ? info.municipios.join(' ') : '',
         ].join(' ').toLowerCase();
         if (!bolsa.includes(texto)) return false;
       }
@@ -430,6 +502,22 @@
     cont.textContent = `⚠ Se detectaron ${total} registro(s) duplicado(s) (mismo contrato + frente + fecha). ` +
       `Se conservó el envío más reciente de cada uno y se descartó el resto ` +
       `(Rutinarios: ${ESTADO.duplicadosIgnorados.rutinarios}, Implementación: ${ESTADO.duplicadosIgnorados.implementacion}).`;
+  }
+
+  // --- Render: aviso de registros "Sin dato" ocultados (sección 12) ---
+
+  function renderAvisoSinDato() {
+    const cont = document.getElementById('aviso-sin-dato');
+    const total = ESTADO.ocultosSinDato;
+    if (total <= 0) {
+      cont.hidden = true;
+      cont.textContent = '';
+      return;
+    }
+    cont.hidden = false;
+    cont.textContent = `⚠ ${total} registro(s) sin ningún dato de checklist fueron ocultados ` +
+      `(no se cuentan en la tabla, el resumen ni los gráficos). No se muestran los registros ` +
+      `"Incompleto" (falta un lado del formulario) — esos siguen siempre visibles.`;
   }
 
   // --- Render: resumen KPI ---
@@ -461,8 +549,10 @@
 
   // --- Render: gráfico de barras por contrato ---
 
-  function renderGrafico(lista) {
-    const cont = document.getElementById('grafico-contratos');
+  // Construye el HTML de las barras de puntaje promedio por contrato. Extraído de
+  // renderGrafico() para poder reutilizarlo tal cual en el reporte imprimible (Tarea F),
+  // que antes lo omitía por completo.
+  function construirHtmlGraficoContratos(lista) {
     const porContrato = new Map();
     lista.forEach((r) => {
       if (r.puntaje === null) return;
@@ -471,8 +561,7 @@
     });
 
     if (porContrato.size === 0) {
-      cont.innerHTML = '<p class="sin-datos">No hay registros con puntaje calculable para los filtros actuales.</p>';
-      return;
+      return '<p class="sin-datos">No hay registros con puntaje calculable para los filtros actuales.</p>';
     }
 
     const filas = Array.from(porContrato.entries()).map(([contrato, puntajes]) => {
@@ -482,7 +571,7 @@
       return { contrato, etiqueta, promedio, semaforo: semaforoDe(promedio) };
     }).sort((a, b) => b.promedio - a.promedio);
 
-    cont.innerHTML = filas.map((f) => `
+    return filas.map((f) => `
       <div class="barra-contrato">
         <div class="barra-etiqueta" title="${escapeHtml(f.etiqueta)}">${escapeHtml(f.etiqueta)}</div>
         <div class="barra-fondo">
@@ -491,6 +580,121 @@
         <div class="barra-valor">${f.promedio}%</div>
       </div>
     `).join('');
+  }
+
+  function renderGrafico(lista) {
+    document.getElementById('grafico-contratos').innerHTML = construirHtmlGraficoContratos(lista);
+  }
+
+  // --- Render: gráficos dinámicos (Chart.js) — reaccionan a los mismos filtros que la
+  // tabla, porque reciben la misma `lista` ya filtrada por registrosFiltrados(). ---
+
+  function renderGraficoSemaforo(lista) {
+    const canvas = document.getElementById('grafico-semaforo');
+    if (!canvas || typeof Chart === 'undefined') {
+      diagLog('renderGraficoSemaforo: SALIDA TEMPRANA (canvas ausente o Chart.js no cargó)', { canvasExiste: !!canvas, chartDefinido: typeof Chart !== 'undefined' });
+      chartSemaforoListo = Promise.resolve();
+      return;
+    }
+    const conteos = { verde: 0, amarillo: 0, rojo: 0 };
+    lista.forEach((r) => { if (conteos.hasOwnProperty(r.semaforo)) conteos[r.semaforo]++; });
+    const etiquetas = [ETIQUETAS_SEMAFORO.verde, ETIQUETAS_SEMAFORO.amarillo, ETIQUETAS_SEMAFORO.rojo];
+    const datos = [conteos.verde, conteos.amarillo, conteos.rojo];
+    const colores = [COLOR_CHART_VERDE, COLOR_CHART_AMARILLO, COLOR_CHART_ROJO];
+
+    // Nueva promesa ANTES de disparar la creación/actualización: cualquiera que esté
+    // esperando la anterior (ya resuelta o no) pasa a esperar esta, que representa el
+    // render que está a punto de empezar.
+    chartSemaforoListo = new Promise((resolve) => { resolverChartSemaforoListo = resolve; });
+
+    if (chartSemaforo) {
+      diagLog('renderGraficoSemaforo: chart.update() (ya existía)', { datos });
+      chartSemaforo.data.datasets[0].data = datos;
+      chartSemaforo.update();
+      return;
+    }
+    diagLog('renderGraficoSemaforo: new Chart() (primera vez)', { datos });
+    chartSemaforo = new Chart(canvas, {
+      type: 'pie',
+      data: { labels: etiquetas, datasets: [{ data: datos, backgroundColor: colores }] },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } },
+        // Se dispara al terminar CADA animación (la creación inicial y también cada
+        // chart.update() futuro), porque queda registrado una sola vez en las opciones
+        // del gráfico. resolverChartSemaforoListo siempre apunta al resolver de la
+        // promesa MÁS RECIENTE (ver arriba), así que esto resuelve exactamente el render
+        // que estaba en curso cuando terminó — nunca uno viejo ya superado.
+        animation: {
+          onComplete: () => {
+            diagLog('renderGraficoSemaforo: animation.onComplete disparado');
+            if (resolverChartSemaforoListo) resolverChartSemaforoListo();
+          },
+        },
+      },
+    });
+  }
+
+  function renderGraficoTendencia(lista) {
+    const canvas = document.getElementById('grafico-tendencia');
+    if (!canvas || typeof Chart === 'undefined') {
+      diagLog('renderGraficoTendencia: SALIDA TEMPRANA (canvas ausente o Chart.js no cargó)', { canvasExiste: !!canvas, chartDefinido: typeof Chart !== 'undefined' });
+      chartTendenciaListo = Promise.resolve();
+      return;
+    }
+    const porFecha = new Map();
+    lista.forEach((r) => {
+      if (r.puntaje === null || !r.fecha) return;
+      if (!porFecha.has(r.fecha)) porFecha.set(r.fecha, []);
+      porFecha.get(r.fecha).push(r.puntaje);
+    });
+    const fechas = Array.from(porFecha.keys()).sort();
+    const valores = fechas.map((fecha) => {
+      const puntajes = porFecha.get(fecha);
+      return Math.round((puntajes.reduce((s, v) => s + v, 0) / puntajes.length) * 10) / 10;
+    });
+
+    chartTendenciaListo = new Promise((resolve) => { resolverChartTendenciaListo = resolve; });
+    ultimaCantidadFechasTendencia = fechas.length;
+
+    if (chartTendencia) {
+      diagLog('renderGraficoTendencia: chart.update() (ya existía)', { fechasDistintas: fechas.length });
+      chartTendencia.data.labels = fechas;
+      chartTendencia.data.datasets[0].data = valores;
+      chartTendencia.update();
+      return;
+    }
+    diagLog('renderGraficoTendencia: new Chart() (primera vez)', { fechasDistintas: fechas.length });
+    chartTendencia = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: fechas,
+        datasets: [{
+          label: '% de cumplimiento promedio',
+          data: valores,
+          borderColor: COLOR_CHART_VERDE,
+          backgroundColor: COLOR_CHART_VERDE,
+          tension: 0.2,
+          spanGaps: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        scales: { y: { min: 0, max: 100, ticks: { callback: (v) => `${v}%` } } },
+        plugins: { legend: { display: false } },
+        animation: {
+          onComplete: () => {
+            diagLog('renderGraficoTendencia: animation.onComplete disparado', { fechasDistintas: ultimaCantidadFechasTendencia });
+            if (resolverChartTendenciaListo) resolverChartTendenciaListo();
+          },
+        },
+      },
+    });
+  }
+
+  function renderGraficosDinamicos(lista) {
+    renderGraficoSemaforo(lista);
+    renderGraficoTendencia(lista);
   }
 
   // --- Render: tabla y detalle ---
@@ -529,6 +733,37 @@
       <div class="detalle-registro">
         <div class="detalle-meta">
           <div class="detalle-item"><span class="etq">Frente</span><span class="val">${escapeHtml(registro.frente || 'Sin dato')}</span></div>
+          <div class="detalle-item"><span class="etq">Tipo de cierre</span><span class="val">${escapeHtml(registro.tipo_cierre || 'Sin dato')}</span></div>
+          <div class="detalle-item"><span class="etq">Diligenciado por</span><span class="val">${escapeHtml(textoDiligenciadoPor(registro))}</span></div>
+        </div>
+        ${items}
+        <div class="detalle-observaciones">
+          <span class="etq">Observaciones</span>
+          <span>${escapeHtml(registro.observaciones || 'Sin observaciones registradas.')}</span>
+        </div>
+        ${renderFotos(registro)}
+      </div>
+    `;
+  }
+
+  // Versión del detalle usada SOLO en el reporte imprimible (Tarea F, sección 12). Casi
+  // idéntica a renderDetalle(), salvo que omite la fila "Frente": ese número solo tiene
+  // sentido para quien opera el tablero (identificador interno que varía de significado
+  // entre contratos) — en el reporte, pensado para un lector externo, la cabecera del
+  // registro ya muestra en su lugar la dirección real, así que repetir "Frente" aquí sería
+  // redundante y menos útil.
+  function renderDetalleReporte(registro) {
+    const etiquetas = etiquetasPara(registro);
+    const pesos = pesosPara(registro);
+    const items = Object.keys(pesos).map((clave) => {
+      const valor = registro[clave];
+      const texto = (valor == null || valor === '') ? 'Sin dato' : valor;
+      return `<div class="detalle-item"><span class="etq">${escapeHtml(etiquetas[clave] || clave)}</span><span class="val">${escapeHtml(texto)}</span></div>`;
+    }).join('');
+
+    return `
+      <div class="detalle-registro">
+        <div class="detalle-meta">
           <div class="detalle-item"><span class="etq">Tipo de cierre</span><span class="val">${escapeHtml(registro.tipo_cierre || 'Sin dato')}</span></div>
           <div class="detalle-item"><span class="etq">Diligenciado por</span><span class="val">${escapeHtml(textoDiligenciadoPor(registro))}</span></div>
         </div>
@@ -596,6 +831,238 @@
     }).join('');
   }
 
+  // --- Reporte imprimible (Tarea F, sección 12) ---
+
+  // Texto legible de los filtros activos (menos fechas, que van aparte en
+  // formatearRangoFechas) para dejar constancia en el encabezado del reporte de qué se
+  // está mostrando.
+  function formatearFiltrosActivos() {
+    const f = ESTADO.filtro;
+    const etiquetaTipo = f.tipo === 'todos' ? 'Todos' : (f.tipo === 'rutinario' ? 'Rutinarios' : 'Puesta en Operación (PO)');
+    let etiquetaContrato = 'Todos';
+    if (f.contrato !== 'todos') {
+      const info = contratoInfo(f.contrato);
+      etiquetaContrato = info ? `${f.contrato} · ${info.proyecto}` : f.contrato;
+    }
+    // Nota: el filtro "Frente" (identificador interno, distinto según el contrato — ver
+    // Tarea I, sección 12) sigue existiendo y funcionando en la tabla interactiva, pero
+    // deliberadamente no se menciona en el reporte impreso: ninguna aparición de la
+    // palabra "Frente" debe llegar al documento final, ni siquiera en este resumen de
+    // filtros activos.
+    const partes = [
+      `Tipo: ${etiquetaTipo}`,
+      `Contrato: ${etiquetaContrato}`,
+      `Contratista: ${f.contratista === 'todos' ? 'Todos' : f.contratista}`,
+      `Diligenciado por: ${f.diligenciado_por === 'todos' ? 'Todos' : f.diligenciado_por}`,
+      `Semáforo: ${f.semaforo === 'todos' ? 'Todos' : ETIQUETAS_SEMAFORO[f.semaforo]}`,
+    ];
+    if (f.texto.trim()) partes.push(`Búsqueda: "${f.texto.trim()}"`);
+    return partes.join(' · ');
+  }
+
+  function formatearRangoFechas() {
+    const f = ESTADO.filtro;
+    if (!f.desde && !f.hasta) return 'Rango de fechas: sin definir (todas las fechas disponibles)';
+    return `Rango de fechas: ${f.desde || '(sin definir)'} a ${f.hasta || '(sin definir)'}`;
+  }
+
+  // Detalle completo por registro solo cuando el usuario definió AMBAS fechas y el rango
+  // es acotado (8 días o menos) — evita un reporte enorme si el rango es amplio o abierto.
+  function rangoParaDetalle() {
+    const f = ESTADO.filtro;
+    if (!f.desde || !f.hasta) return false;
+    const dias = Math.round((new Date(`${f.hasta}T00:00:00`) - new Date(`${f.desde}T00:00:00`)) / 86400000);
+    return dias >= 0 && dias <= 8;
+  }
+
+  function construirReporteImpresion() {
+    const listaFiltrada = registrosFiltrados().slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const detallado = rangoParaDetalle();
+
+    // Tarea M (sección 12): los registros "Incompleto" (falta el lado DG o PO en
+    // Implementación) NO se imprimen en el reporte — a diferencia de la tabla interactiva
+    // del tablero, donde siguen y deben seguir siendo siempre visibles (sección 9). Se
+    // excluyen de TODO lo que compone el reporte (resumen, barra por contrato y listado de
+    // registros) para que esos números sean consistentes entre sí. Las dos imágenes de
+    // Chart.js (torta y línea) son la única excepción — son una captura del <canvas> ya
+    // dibujado en pantalla, que sigue las mismas reglas que el resto del tablero (si algún
+    // día hace falta que también excluyan "Incompleto", habría que crear instancias de
+    // Chart.js aparte solo para el reporte en vez de reusar las de pantalla).
+    //
+    // Tarea N: la exclusión se mantiene, pero el aviso "N excluidos" ya NO se imprime — un
+    // contratista o gestor externo que recibe el PDF no necesita ver esa nota interna. El
+    // conteo sigue disponible en el tablero interactivo (ver ESTADO y el resto de avisos en
+    // pantalla); aquí simplemente no se construye ningún párrafo para el reporte.
+    const lista = listaFiltrada.filter((r) => !r.incompleto);
+
+    const conteos = { verde: 0, amarillo: 0, rojo: 0, sin_dato: 0 };
+    lista.forEach((r) => { conteos[r.semaforo]++; });
+    const conPuntaje = lista.filter((r) => r.puntaje !== null);
+    const promedio = conPuntaje.length
+      ? Math.round((conPuntaje.reduce((s, r) => s + r.puntaje, 0) / conPuntaje.length) * 10) / 10
+      : null;
+
+    // Los gráficos de Chart.js viven en <canvas> del tablero en pantalla, que se oculta al
+    // imprimir. Se convierten a imagen (toBase64Image) para insertarlos como <img> dentro
+    // del reporte. Si Chart.js no llegó a cargar (p. ej. el CDN falló), chartSemaforo /
+    // chartTendencia quedan null: se avisa en vez de dejar un hueco silencioso. La Tarea L
+    // ya garantizó (en generarReporte(), antes de llamar a esta función) que si los
+    // gráficos SÍ cargaron, su animación ya terminó — nunca se capturan a medio dibujar.
+    const imgSemaforo = chartSemaforo ? chartSemaforo.toBase64Image() : '';
+    diagLog('construirReporteImpresion: toBase64Image() capturado (torta)', {
+      chartExiste: !!chartSemaforo,
+      longitud: imgSemaforo.length,
+    });
+    const imgTendencia = chartTendencia ? chartTendencia.toBase64Image() : '';
+    diagLog('construirReporteImpresion: toBase64Image() capturado (línea)', {
+      chartExiste: !!chartTendencia,
+      longitud: imgTendencia.length,
+    });
+    const avisoGraficoNoDisponible = '<p class="sin-datos">Gráfico no disponible (no se pudo cargar la librería de gráficos).</p>';
+
+    const filasHtml = detallado
+      ? lista.map((r) => {
+          const info = contratoInfo(r.contrato);
+          const etiquetaContratista = info && info.contratista ? ` · ${escapeHtml(info.contratista)}` : '';
+          return `
+          <div class="reporte-registro ${r.semaforo}">
+            <div class="reporte-registro-cabecera">
+              <div class="reporte-registro-titulo">
+                <strong>${escapeHtml(r.fecha || '—')}</strong> ·
+                ${r.tipo === 'rutinario' ? 'Rutinario' : 'PO'} ·
+                <span class="badge ${r.semaforo}">${ETIQUETAS_SEMAFORO[r.semaforo]}</span>
+                ${renderNotas(r)}
+              </div>
+              <div class="reporte-registro-meta-linea">
+                Contrato ${escapeHtml(r.contrato || '—')}${etiquetaContratista} ·
+                ${escapeHtml(r.direccion || 'Sin dirección registrada')} ·
+                Puntaje ${r.puntaje === null ? '—' : `${r.puntaje}%`}
+              </div>
+            </div>
+            ${renderDetalleReporte(r)}
+          </div>
+        `;
+        }).join('')
+      : `<table class="reporte-tabla-resumida">
+          <thead>
+            <tr><th>Fecha</th><th>Tipo</th><th>Contrato</th><th>Contratista</th><th>Dirección</th><th>Puntaje</th><th>Semáforo</th></tr>
+          </thead>
+          <tbody>
+            ${lista.map((r) => {
+              const info = contratoInfo(r.contrato);
+              return `
+              <tr>
+                <td>${escapeHtml(r.fecha || '—')}</td>
+                <td>${r.tipo === 'rutinario' ? 'Rutinario' : 'PO'}</td>
+                <td>${escapeHtml(r.contrato || '—')}</td>
+                <td>${escapeHtml(info ? info.contratista : '—')}</td>
+                <td>${escapeHtml(r.direccion || '—')}</td>
+                <td>${r.puntaje === null ? '—' : `${r.puntaje}%`}</td>
+                <td><span class="badge ${r.semaforo}">${ETIQUETAS_SEMAFORO[r.semaforo]}</span></td>
+              </tr>
+            `;
+            }).join('')}
+          </tbody>
+        </table>`;
+
+    const cont = document.getElementById('reporte-impresion');
+    cont.innerHTML = `
+      <header class="reporte-cabecera">
+        <img src="LogoEPM.png" alt="Logo EPM" class="reporte-logo">
+        <div>
+          <h1>Tablero de Seguimiento PMTs — Reporte</h1>
+          <p>Generado el ${escapeHtml(new Date().toLocaleString('es-CO'))}</p>
+          <p class="reporte-rango">${escapeHtml(formatearRangoFechas())}</p>
+          <p class="reporte-filtros">${escapeHtml(formatearFiltrosActivos())}</p>
+        </div>
+      </header>
+      <section class="reporte-resumen">
+        <h2>Resumen</h2>
+        <div class="reporte-resumen-grid">
+          <div><strong>${lista.length}</strong>Registros filtrados</div>
+          <div><strong>${promedio === null ? '—' : `${promedio}%`}</strong>Puntaje promedio</div>
+          <div><strong>${conteos.verde}</strong>En verde (cumple)</div>
+          <div><strong>${conteos.amarillo}</strong>En amarillo (por mejorar)</div>
+          <div><strong>${conteos.rojo}</strong>En rojo (crítico)</div>
+        </div>
+      </section>
+      <section class="reporte-graficos">
+        <h2>Distribución por semáforo y evolución del cumplimiento</h2>
+        <div class="reporte-graficos-grid">
+          ${imgSemaforo ? `<img src="${imgSemaforo}" alt="Distribución por semáforo" class="reporte-grafico-img">` : avisoGraficoNoDisponible}
+          ${imgTendencia ? `<img src="${imgTendencia}" alt="Evolución del cumplimiento" class="reporte-grafico-img">` : avisoGraficoNoDisponible}
+        </div>
+      </section>
+      <section class="reporte-grafico-contratos">
+        <h2>Puntaje promedio por contrato</h2>
+        ${construirHtmlGraficoContratos(lista)}
+      </section>
+      <section class="reporte-registros">
+        <h2>Registros (${detallado ? 'detalle completo — rango de 8 días o menos' : 'resumen por fila'})</h2>
+        ${lista.length ? filasHtml : '<p class="sin-datos">No hay registros para los filtros seleccionados.</p>'}
+      </section>
+    `;
+  }
+
+  // Causa real encontrada con la instrumentación de diagnóstico (sección 12): las imágenes
+  // de los gráficos SÍ se capturaban con contenido real (toBase64Image devolvía un data URL
+  // largo, no el de una imagen en blanco), pero entre asignarlo al `src` del <img> del
+  // reporte y llamar a window.print() pasaban menos de 6ms — el navegador no alcanza a
+  // decodificar/pintar la imagen nueva antes de que arranque la impresión, así que sale en
+  // blanco en el PDF aunque el dato ya era correcto. Se espera explícitamente a que cada
+  // <img> confirme que terminó de decodificar (img.decode(), con el evento 'load' como
+  // respaldo si decode() no está disponible o falla) antes de imprimir.
+  async function esperarImagenesReporte() {
+    const imgs = Array.from(document.querySelectorAll('#reporte-impresion .reporte-grafico-img'));
+    diagLog('esperarImagenesReporte: imágenes a esperar', { cantidad: imgs.length });
+    await Promise.all(imgs.map((img) => {
+      const etiqueta = img.alt || img.className;
+      if (typeof img.decode === 'function') {
+        return img.decode()
+          .then(() => diagLog(`esperarImagenesReporte: decode() resuelto — "${etiqueta}"`, { naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight }))
+          .catch((err) => {
+            diagLog(`esperarImagenesReporte: decode() falló — "${etiqueta}", uso evento load como respaldo`, { error: String(err) });
+            return new Promise((resolve) => {
+              img.addEventListener('load', () => {
+                diagLog(`esperarImagenesReporte: evento load (respaldo) — "${etiqueta}"`, { naturalWidth: img.naturalWidth });
+                resolve();
+              }, { once: true });
+              img.addEventListener('error', () => {
+                diagLog(`esperarImagenesReporte: evento error (respaldo) — "${etiqueta}"`);
+                resolve();
+              }, { once: true });
+            });
+          });
+      }
+      // Navegadores muy viejos sin img.decode(): usar directamente el evento 'load'.
+      return new Promise((resolve) => {
+        img.addEventListener('load', () => {
+          diagLog(`esperarImagenesReporte: evento load — "${etiqueta}"`, { naturalWidth: img.naturalWidth });
+          resolve();
+        }, { once: true });
+        img.addEventListener('error', () => {
+          diagLog(`esperarImagenesReporte: evento error — "${etiqueta}"`);
+          resolve();
+        }, { once: true });
+      });
+    }));
+  }
+
+  async function generarReporte() {
+    diagLog('generarReporte: clic recibido, empieza a esperar Promise.all');
+    // Tarea L: esperar a que Chart.js confirme (vía animation.onComplete) que el último
+    // render de cada gráfico ya terminó, antes de capturarlos como imagen. Si Chart.js
+    // nunca llegó a cargar, ambas promesas ya están resueltas (ver renderGraficoSemaforo/
+    // Tendencia) y este await no introduce ninguna espera.
+    await Promise.all([chartSemaforoListo, chartTendenciaListo]);
+    diagLog('generarReporte: Promise.all resuelto, construyendo el reporte');
+    construirReporteImpresion();
+    diagLog('generarReporte: reporte construido, esperando a que las <img> terminen de decodificar');
+    await esperarImagenesReporte();
+    diagLog('generarReporte: imágenes listas, llamando a window.print()');
+    window.print();
+  }
+
   // --- Filtros: selects dinámicos ---
 
   function poblarFiltroContratos() {
@@ -611,6 +1078,21 @@
     select.innerHTML = opciones.join('');
   }
 
+  // Contratistas distintos presentes en contratos.json, a través del contrato de cada
+  // registro ya cargado (mismo mecanismo que resuelve "Proyecto" en la tabla) — Tarea J.
+  function poblarFiltroContratista() {
+    const select = document.getElementById('filtro-contratista');
+    const actuales = new Set();
+    ESTADO.registros.forEach((r) => {
+      const info = contratoInfo(r.contrato);
+      if (info && info.contratista) actuales.add(info.contratista);
+    });
+    const opciones = ['<option value="todos">Todos</option>'].concat(
+      Array.from(actuales).sort().map((nombre) => `<option value="${escapeHtml(nombre)}">${escapeHtml(nombre)}</option>`)
+    );
+    select.innerHTML = opciones.join('');
+  }
+
   function poblarFiltroFrentes() {
     const select = document.getElementById('filtro-frente');
     const actuales = new Set(ESTADO.registros.map((r) => normStr(r.frente)).filter(Boolean));
@@ -620,11 +1102,24 @@
     select.innerHTML = opciones.join('');
   }
 
+  // Distintos valores de "diligenciado por" ya resueltos (nombre vía funcionarios.json,
+  // o valor crudo si no hay coincidencia) — igual que se muestra en la tabla/detalle.
+  function poblarFiltroDiligenciadoPor() {
+    const select = document.getElementById('filtro-diligenciado-por');
+    const actuales = new Set(ESTADO.registros.map((r) => textoDiligenciadoPor(r)).filter(Boolean));
+    const opciones = ['<option value="todos">Todos</option>'].concat(
+      Array.from(actuales).sort().map((valor) => `<option value="${escapeHtml(valor)}">${escapeHtml(valor)}</option>`)
+    );
+    select.innerHTML = opciones.join('');
+  }
+
   function leerFiltrosDesdeUI() {
     ESTADO.filtro = {
       tipo: document.getElementById('filtro-tipo').value,
       contrato: document.getElementById('filtro-contrato').value,
+      contratista: document.getElementById('filtro-contratista').value,
       frente: document.getElementById('filtro-frente').value,
+      diligenciado_por: document.getElementById('filtro-diligenciado-por').value,
       semaforo: document.getElementById('filtro-semaforo').value,
       texto: document.getElementById('filtro-texto').value,
       desde: document.getElementById('filtro-desde').value,
@@ -636,13 +1131,14 @@
     const lista = registrosFiltrados();
     renderResumen(lista);
     renderGrafico(lista);
+    renderGraficosDinamicos(lista);
     renderTabla(lista);
   }
 
   // --- Eventos ---
 
   function wireEventos() {
-    ['filtro-tipo', 'filtro-contrato', 'filtro-frente', 'filtro-semaforo', 'filtro-desde', 'filtro-hasta'].forEach((id) => {
+    ['filtro-tipo', 'filtro-contrato', 'filtro-contratista', 'filtro-frente', 'filtro-diligenciado-por', 'filtro-semaforo', 'filtro-desde', 'filtro-hasta'].forEach((id) => {
       document.getElementById(id).addEventListener('change', () => {
         leerFiltrosDesdeUI();
         renderizarTodo();
@@ -655,7 +1151,9 @@
     document.getElementById('btn-limpiar-filtros').addEventListener('click', () => {
       document.getElementById('filtro-tipo').value = 'todos';
       document.getElementById('filtro-contrato').value = 'todos';
+      document.getElementById('filtro-contratista').value = 'todos';
       document.getElementById('filtro-frente').value = 'todos';
+      document.getElementById('filtro-diligenciado-por').value = 'todos';
       document.getElementById('filtro-semaforo').value = 'todos';
       document.getElementById('filtro-texto').value = '';
       document.getElementById('filtro-desde').value = '';
@@ -663,6 +1161,8 @@
       leerFiltrosDesdeUI();
       renderizarTodo();
     });
+
+    document.getElementById('btn-generar-reporte').addEventListener('click', generarReporte);
 
     document.getElementById('cuerpo-tabla').addEventListener('click', (ev) => {
       const miniatura = ev.target.closest('.foto-miniatura');
@@ -729,19 +1229,36 @@
       implementacion: fusionImp.duplicadosIgnorados,
     };
 
-    ESTADO.registros = [
+    const todosLosRegistros = [
       ...dedupRut.registros.map((row) => mapearRegistro(row, 'rutinario', PESOS_RUT)),
       ...fusionImp.registros.map((row) => mapearRegistro(row, 'po', PESOS_PO)),
     ];
+
+    // Sección 12: ocultar registros "Sin dato" (ningún ítem del checklist respondido).
+    // Distinto de "Incompleto" (falta un lado del formulario en Implementación), que debe
+    // seguir siendo visible siempre aunque también tenga semaforo === 'sin_dato' — por eso
+    // se excluye solo cuando NO está marcado como incompleto.
+    let ocultosSinDato = 0;
+    ESTADO.registros = todosLosRegistros.filter((r) => {
+      if (r.semaforo === 'sin_dato' && !r.incompleto) {
+        ocultosSinDato++;
+        return false;
+      }
+      return true;
+    });
+    ESTADO.ocultosSinDato = ocultosSinDato;
 
     document.getElementById('fuente-datos').textContent =
       `Rutinarios: ${ESTADO.fuente.rutinarios} · Implementación (PO): ${ESTADO.fuente.implementacion}`;
 
     poblarFiltroContratos();
+    poblarFiltroContratista();
     poblarFiltroFrentes();
+    poblarFiltroDiligenciadoPor();
     leerFiltrosDesdeUI();
     wireEventos();
     renderAvisoDuplicados();
+    renderAvisoSinDato();
     renderizarTodo();
   }
 

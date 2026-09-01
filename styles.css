@@ -129,6 +129,52 @@ h2 {
 }
 #btn-limpiar-filtros:hover { background: #eef3fa; }
 
+/* --- Acciones / reporte (Tarea F, sección 12) --- */
+.acciones-reporte {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: var(--sombra);
+}
+#btn-generar-reporte {
+  padding: 8px 16px;
+  border: none;
+  background: var(--color-marca);
+  color: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+#btn-generar-reporte:hover { background: var(--color-primario-oscuro); }
+.reporte-ayuda { margin: 0; font-size: 0.8rem; color: var(--color-texto-suave); }
+
+/* --- Gráficos dinámicos (torta semáforo + línea de tendencia) --- */
+.graficos-dinamicos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.grafico-tarjeta {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  padding: 14px 16px;
+  box-shadow: var(--sombra);
+}
+.grafico-tarjeta h3 {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: var(--color-texto-suave);
+}
+.grafico-tarjeta canvas { max-height: 280px; }
+
 /* --- Gráfico de barras (por contrato) --- */
 .grafico-contratos {
   background: var(--color-superficie);
@@ -234,6 +280,10 @@ table.tabla-registros tbody tr.fila-detalle td {
   font-size: 0.82rem;
   padding: 3px 0;
   border-bottom: 1px dashed #e2e6ea;
+  /* Tarea O: una sola fila "Campo: valor" nunca debe cortarse a la mitad entre dos páginas
+     al imprimir (sin efecto en pantalla, donde no hay paginación). */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 .detalle-item .etq { color: var(--color-texto-suave); }
 .detalle-item .val { font-weight: 600; }
@@ -252,6 +302,9 @@ table.tabla-registros tbody tr.fila-detalle td {
   margin-top: 6px;
   padding-top: 8px;
   border-top: 1px solid var(--color-borde);
+  /* Tarea O: el párrafo de observaciones no debe partirse a la mitad entre dos páginas. */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 .detalle-observaciones .etq { display: block; color: var(--color-texto-suave); margin-bottom: 2px; }
 
@@ -308,4 +361,132 @@ footer.pie {
 @media (max-width: 640px) {
   table.tabla-registros { min-width: 680px; }
   .barra-contrato { grid-template-columns: 100px 1fr 40px; }
+}
+
+/* --- Reporte imprimible (Tarea F, sección 12) ---
+   El contenedor está oculto en pantalla (display:none) y solo se muestra dentro de
+   @media print, momento en el que se oculta todo lo demás (filtros, botones, tabla en
+   pantalla) para que en el PDF/impresión solo aparezca el reporte generado por app.js. */
+.reporte-impresion { display: none; }
+
+.reporte-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid var(--color-marca);
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+}
+.reporte-logo { height: 50px; width: auto; }
+.reporte-cabecera h1 { margin: 0 0 4px; font-size: 1.3rem; color: var(--color-primario-oscuro); }
+.reporte-cabecera p { margin: 2px 0; font-size: 0.85rem; color: var(--color-texto-suave); }
+.reporte-filtros,
+.reporte-rango { font-weight: 600; color: var(--color-texto); }
+
+.reporte-impresion h2 {
+  font-size: 1rem;
+  color: var(--color-primario-oscuro);
+  border-bottom: 1px solid var(--color-borde);
+  padding-bottom: 4px;
+  margin: 0 0 10px;
+}
+.reporte-impresion section { margin-bottom: 22px; }
+
+.reporte-resumen-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  font-size: 0.85rem;
+}
+.reporte-resumen-grid strong { font-size: 1.15rem; display: block; }
+
+.reporte-graficos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.reporte-grafico-img {
+  max-width: 46%;
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
+}
+
+.reporte-tabla-resumida { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.reporte-tabla-resumida th,
+.reporte-tabla-resumida td {
+  border: 1px solid var(--color-borde);
+  padding: 6px 8px;
+  text-align: left;
+}
+.reporte-tabla-resumida th { background: #eef1f6; }
+/* Fila pequeña: evita que se corte a la mitad entre dos páginas (Tarea O), sin forzar nada
+   a nivel de toda la tabla. */
+.reporte-tabla-resumida tr { break-inside: avoid; page-break-inside: avoid; }
+
+/* Cada registro es su propia "tarjeta": borde completo + franja de color a la izquierda
+   (según semáforo) + fondo tenue, para que el límite entre un registro y el siguiente sea
+   inconfundible incluso leyendo la hoja impresa rápido (Tarea K). A propósito NO se aplica
+   break-inside/page-break-inside "avoid" aquí, a nivel de todo el registro (Tarea O): un
+   registro con checklist completo puede ser casi tan alto como una página, y "avoid" a ese
+   nivel obliga a Chromium a saltar la página entera aunque sobre bastante espacio en blanco
+   apenas ese registro no cabe completo. En vez de eso, el registro puede partirse entre
+   páginas con toda naturalidad — lo único que se protege de quedar cortado a la mitad son
+   las piezas pequeñas que sí se verían mal partidas: cada fila "Campo: valor" (.detalle-item,
+   más abajo en este archivo), el párrafo de observaciones (.detalle-observaciones) y la
+   cabecera del registro (.reporte-registro-cabecera, justo debajo). */
+.reporte-registro {
+  border: 1px solid var(--color-borde);
+  border-left: 5px solid var(--color-texto-suave);
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin: 0 0 18px;
+  background: #f8fafb;
+}
+.reporte-registro.verde { border-left-color: var(--color-verde); }
+.reporte-registro.amarillo { border-left-color: var(--color-amarillo); }
+.reporte-registro.rojo { border-left-color: var(--color-rojo); }
+.reporte-registro.sin_dato { border-left-color: var(--color-sin-dato); }
+
+.reporte-registro-cabecera {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-borde);
+  /* Tarea O: la cabecera (fecha/tipo/semáforo + contrato/dirección/puntaje) es un bloque
+     pequeño — no debe partirse entre sus dos líneas al cruzar una página. */
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.reporte-registro-titulo { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
+.reporte-registro-meta-linea { font-size: 0.82rem; color: var(--color-texto-suave); }
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body > header.cabecera,
+  body > main,
+  body > footer.pie,
+  .lightbox-overlay {
+    display: none !important;
+  }
+  .reporte-impresion {
+    display: block !important;
+  }
+
+  /* Tarea O: CSS Grid (usado en .detalle-registro/.detalle-meta para el layout en pantalla)
+     no se fragmenta de forma confiable entre páginas al imprimir en Chromium — ante la
+     primera fila que no cabe completa, empuja TODA la cuadrícula a la página siguiente en
+     vez de partirla donde corresponde, dejando exactamente el hueco grande que se quería
+     evitar. Se cambia a flujo de bloque normal SOLO dentro del reporte impreso (no afecta
+     la vista expandida en pantalla, donde no hay paginación): cada fila queda en una sola
+     columna, apilada, y el navegador sí sabe fragmentar bloques normales entre páginas sin
+     problema — .detalle-item ya tiene break-inside:avoid, así que cada fila individual
+     sigue sin poder cortarse a la mitad. */
+  .reporte-impresion .detalle-registro,
+  .reporte-impresion .detalle-meta {
+    display: block;
+  }
+
+  @page { margin: 1.5cm; }
 }

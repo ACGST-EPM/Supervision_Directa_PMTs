@@ -19,6 +19,7 @@
 <main>
 
   <p id="aviso-duplicados" class="aviso-duplicados" hidden></p>
+  <p id="aviso-sin-dato" class="aviso-duplicados" hidden></p>
 
   <section id="seccion-resumen" aria-label="Resumen">
     <h2>Resumen</h2>
@@ -45,8 +46,20 @@
         </select>
       </div>
       <div class="campo-filtro">
+        <label for="filtro-contratista">Contratista</label>
+        <select id="filtro-contratista">
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+      <div class="campo-filtro">
         <label for="filtro-frente">Frente</label>
         <select id="filtro-frente">
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+      <div class="campo-filtro">
+        <label for="filtro-diligenciado-por">Diligenciado por</label>
+        <select id="filtro-diligenciado-por">
           <option value="todos">Todos</option>
         </select>
       </div>
@@ -73,6 +86,32 @@
         <input type="text" id="filtro-texto" placeholder="Ej. Envigado, señalización...">
       </div>
       <button type="button" id="btn-limpiar-filtros">Limpiar filtros</button>
+    </div>
+  </section>
+
+  <section id="seccion-reporte" aria-label="Reporte">
+    <div class="acciones-reporte">
+      <button type="button" id="btn-generar-reporte">Generar reporte</button>
+      <p class="reporte-ayuda">
+        Genera una vista de impresión con los registros que cumplen los filtros activos.
+        Si el rango "Desde"/"Hasta" está definido y es de 8 días o menos, cada registro se
+        imprime con su checklist completo; en cualquier otro caso, se imprime un resumen
+        por fila.
+      </p>
+    </div>
+  </section>
+
+  <section id="seccion-graficos-dinamicos" aria-label="Gráficos dinámicos">
+    <h2>Gráficos dinámicos</h2>
+    <div class="graficos-dinamicos">
+      <div class="grafico-tarjeta">
+        <h3>Distribución por semáforo</h3>
+        <canvas id="grafico-semaforo" role="img" aria-label="Gráfico de torta con la cantidad de registros filtrados en cada categoría de semáforo"></canvas>
+      </div>
+      <div class="grafico-tarjeta">
+        <h3>Evolución del cumplimiento</h3>
+        <canvas id="grafico-tendencia" role="img" aria-label="Gráfico de línea con el porcentaje de cumplimiento promedio por fecha"></canvas>
+      </div>
     </div>
   </section>
 
@@ -121,9 +160,15 @@
   <img id="lightbox-img" src="" alt="Foto de evidencia ampliada">
 </div>
 
+<!-- Vista de impresión (Tarea F, sección 12): oculta en pantalla, generada por app.js
+     justo antes de window.print(). Vive fuera de <main> para que @media print pueda
+     ocultar TODO lo demás (filtros, botones, tabla en pantalla) y mostrar solo esto. -->
+<div class="reporte-impresion" id="reporte-impresion"></div>
+
 <!-- Scripts clásicos (sin type="module"), en orden de dependencia: -->
 <script src="config.js"></script>
 <script src="modelo.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
