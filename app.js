@@ -153,6 +153,21 @@
   let chartSemaforo = null;
   let chartTendencia = null;
 
+  // Tarea L (sección 12): Chart.js anima cada render/actualización (~1s por defecto) de
+  // forma asíncrona vía requestAnimationFrame — el <canvas> NO queda con el dibujo final
+  // completo en el mismo tick en que se llama a new Chart(...) o chart.update(). Capturar
+  // la imagen con toBase64Image() antes de que esa animación termine produce una imagen en
+  // blanco o a medio dibujar; el riesgo es mayor en producción, donde la latencia real de
+  // cargar Chart.js desde el CDN puede correr la creación del gráfico más cerca del momento
+  // en que el usuario hace clic en "Generar reporte". Estas promesas se resuelven en el
+  // callback options.animation.onComplete de cada gráfico (el evento que Chart.js dispara
+  // cuando el render/actualización realmente terminó) y generarReporte() las espera antes
+  // de capturar la imagen — nunca se asume que el gráfico ya está listo.
+  let chartSemaforoListo = Promise.resolve();
+  let chartTendenciaListo = Promise.resolve();
+  let resolverChartSemaforoListo = null;
+  let resolverChartTendenciaListo = null;
+
   // Colores oficiales del semáforo (sección 11 de CONTEXTO_PROYECTO.md). Se repiten aquí,
   // en vez de leerlos de las variables CSS, porque Chart.js dibuja en un <canvas> y no
   // resuelve custom properties de CSS automáticamente.
@@ -559,12 +574,17 @@
 
   function renderGraficoSemaforo(lista) {
     const canvas = document.getElementById('grafico-semaforo');
-    if (!canvas || typeof Chart === 'undefined') return;
+    if (!canvas || typeof Chart === 'undefined') { chartSemaforoListo = Promise.resolve(); return; }
     const conteos = { verde: 0, amarillo: 0, rojo: 0 };
     lista.forEach((r) => { if (conteos.hasOwnProperty(r.semaforo)) conteos[r.semaforo]++; });
     const etiquetas = [ETIQUETAS_SEMAFORO.verde, ETIQUETAS_SEMAFORO.amarillo, ETIQUETAS_SEMAFORO.rojo];
     const datos = [conteos.verde, conteos.amarillo, conteos.rojo];
     const colores = [COLOR_CHART_VERDE, COLOR_CHART_AMARILLO, COLOR_CHART_ROJO];
+
+    // Nueva promesa ANTES de disparar la creación/actualización: cualquiera que esté
+    // esperando la anterior (ya resuelta o no) pasa a esperar esta, que representa el
+    // render que está a punto de empezar.
+    chartSemaforoListo = new Promise((resolve) => { resolverChartSemaforoListo = resolve; });
 
     if (chartSemaforo) {
       chartSemaforo.data.datasets[0].data = datos;
@@ -574,13 +594,24 @@
     chartSemaforo = new Chart(canvas, {
       type: 'pie',
       data: { labels: etiquetas, datasets: [{ data: datos, backgroundColor: colores }] },
-      options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } },
+        // Se dispara al terminar CADA animación (la creación inicial y también cada
+        // chart.update() futuro), porque queda registrado una sola vez en las opciones
+        // del gráfico. resolverChartSemaforoListo siempre apunta al resolver de la
+        // promesa MÁS RECIENTE (ver arriba), así que esto resuelve exactamente el render
+        // que estaba en curso cuando terminó — nunca uno viejo ya superado.
+        animation: {
+          onComplete: () => { if (resolverChartSemaforoListo) resolverChartSemaforoListo(); },
+        },
+      },
     });
   }
 
   function renderGraficoTendencia(lista) {
     const canvas = document.getElementById('grafico-tendencia');
-    if (!canvas || typeof Chart === 'undefined') return;
+    if (!canvas || typeof Chart === 'undefined') { chartTendenciaListo = Promise.resolve(); return; }
     const porFecha = new Map();
     lista.forEach((r) => {
       if (r.puntaje === null || !r.fecha) return;
@@ -592,6 +623,8 @@
       const puntajes = porFecha.get(fecha);
       return Math.round((puntajes.reduce((s, v) => s + v, 0) / puntajes.length) * 10) / 10;
     });
+
+    chartTendenciaListo = new Promise((resolve) => { resolverChartTendenciaListo = resolve; });
 
     if (chartTendencia) {
       chartTendencia.data.labels = fechas;
@@ -616,6 +649,9 @@
         responsive: true,
         scales: { y: { min: 0, max: 100, ticks: { callback: (v) => `${v}%` } } },
         plugins: { legend: { display: false } },
+        animation: {
+          onComplete: () => { if (resolverChartTendenciaListo) resolverChartTendenciaListo(); },
+        },
       },
     });
   }
@@ -804,8 +840,21 @@
   }
 
   function construirReporteImpresion() {
-    const lista = registrosFiltrados().slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const listaFiltrada = registrosFiltrados().slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
     const detallado = rangoParaDetalle();
+
+    // Tarea M (sección 12): los registros "Incompleto" (falta el lado DG o PO en
+    // Implementación) NO se imprimen en el reporte — a diferencia de la tabla interactiva
+    // del tablero, donde siguen y deben seguir siendo siempre visibles (sección 9). Se
+    // excluyen de TODO lo que compone el reporte (resumen, barra por contrato y listado de
+    // registros) para que esos números sean consistentes entre sí; nunca en silencio: se
+    // cuentan y se avisan más abajo. Las dos imágenes de Chart.js (torta y línea) son la
+    // única excepción — son una captura del <canvas> ya dibujado en pantalla, que sigue
+    // las mismas reglas que el resto del tablero (si algún día hace falta que también
+    // excluyan "Incompleto", habría que crear instancias de Chart.js aparte solo para el
+    // reporte en vez de reusar las de pantalla).
+    const incompletosExcluidos = listaFiltrada.filter((r) => r.incompleto).length;
+    const lista = listaFiltrada.filter((r) => !r.incompleto);
 
     const conteos = { verde: 0, amarillo: 0, rojo: 0, sin_dato: 0 };
     lista.forEach((r) => { conteos[r.semaforo]++; });
@@ -814,10 +863,18 @@
       ? Math.round((conPuntaje.reduce((s, r) => s + r.puntaje, 0) / conPuntaje.length) * 10) / 10
       : null;
 
+    const avisoIncompletos = incompletosExcluidos > 0
+      ? `<p class="aviso-duplicados">⚠ ${incompletosExcluidos} registro(s) "Incompleto" (falta un lado del formulario en ` +
+        `Implementación) fueron excluidos de este reporte impreso. Siguen siempre visibles en la tabla del tablero — ` +
+        `no se perdieron, solo no se imprimen.</p>`
+      : '';
+
     // Los gráficos de Chart.js viven en <canvas> del tablero en pantalla, que se oculta al
     // imprimir. Se convierten a imagen (toBase64Image) para insertarlos como <img> dentro
     // del reporte. Si Chart.js no llegó a cargar (p. ej. el CDN falló), chartSemaforo /
-    // chartTendencia quedan null: se avisa en vez de dejar un hueco silencioso.
+    // chartTendencia quedan null: se avisa en vez de dejar un hueco silencioso. La Tarea L
+    // ya garantizó (en generarReporte(), antes de llamar a esta función) que si los
+    // gráficos SÍ cargaron, su animación ya terminó — nunca se capturan a medio dibujar.
     const imgSemaforo = chartSemaforo ? chartSemaforo.toBase64Image() : '';
     const imgTendencia = chartTendencia ? chartTendencia.toBase64Image() : '';
     const avisoGraficoNoDisponible = '<p class="sin-datos">Gráfico no disponible (no se pudo cargar la librería de gráficos).</p>';
@@ -878,6 +935,7 @@
           <p class="reporte-filtros">${escapeHtml(formatearFiltrosActivos())}</p>
         </div>
       </header>
+      ${avisoIncompletos}
       <section class="reporte-resumen">
         <h2>Resumen</h2>
         <div class="reporte-resumen-grid">
@@ -906,7 +964,12 @@
     `;
   }
 
-  function generarReporte() {
+  async function generarReporte() {
+    // Tarea L: esperar a que Chart.js confirme (vía animation.onComplete) que el último
+    // render de cada gráfico ya terminó, antes de capturarlos como imagen. Si Chart.js
+    // nunca llegó a cargar, ambas promesas ya están resueltas (ver renderGraficoSemaforo/
+    // Tendencia) y este await no introduce ninguna espera.
+    await Promise.all([chartSemaforoListo, chartTendenciaListo]);
     construirReporteImpresion();
     window.print();
   }
