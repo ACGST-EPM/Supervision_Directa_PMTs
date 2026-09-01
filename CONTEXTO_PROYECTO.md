@@ -157,12 +157,19 @@ falla con 404).
 
 | Fase | Estado |
 |---|---|
-| 1. Repositorio propio + entorno de edición | ✅ Completo (github.dev) |
-| 2. Los 4 archivos corregidos, probados con datos de muestra | 🔄 En curso (siguiente paso) |
-| 3. Publicación en GitHub Pages | ✅ Infraestructura lista (Pages activo, probado con archivo de prueba) |
-| 4. Flujo de Power Automate corregido | ⏳ Diseño definido, pendiente nombres de Implementación y construcción real |
-| 5. Prueba de punta a punta | ⏳ Pendiente |
-| 6. Mantenimiento (vencimiento de token, hábito de Pull antes de publicar) | ⏳ Pendiente |
+| 1. Repositorio propio + entorno de edición | ✅ Completo (github.dev, luego Claude Code Nube) |
+| 2. Los 4 archivos corregidos, probados con datos de muestra | ✅ Completo |
+| 3. Publicación en GitHub Pages | ✅ Completo — publica desde `main` |
+| 4. Flujo de Power Automate corregido (mapeo Rutinarios + Implementación, paginación) | ✅ Completo y en producción (recurrencia diaria activa) |
+| 5. Prueba de punta a punta con datos reales | ✅ Completo |
+| 6. PR `mejoras-datos-reales` (fusión DG/PO, deduplicación, normalización de contratos, identidad visual EPM) | ✅ Fusionado a `main` |
+| 7. PR `mejoras-ux` (filtros nuevos, gráficos dinámicos, reporte PDF, ocultar "Sin dato") | ✅ Fusionado a `main` |
+| 8. Mantenimiento (vencimiento del token cada 90 días, hábito de Pull antes de publicar) | ⏳ Continuo |
+
+**Pendientes abiertos (no bloquean nada, quedan para cuando el usuario tenga tiempo/decisión):**
+- Completar `funcionarios.json`: variantes de nombre para Julián Sánchez y otros funcionarios con doble formato entre Rutinarios e Implementación (Sergio Ochoa y Leydi Marín ya están resueltos).
+- 6 contratos huérfanos sin resolver en `contratos.json`: `CW348929`, `CW353551`, `CW369125`, `CW280931`, `CW327799`, `CW3000` — decidir si son válidos (agregarlos) o error de diligenciamiento (dejarlos como "Contrato no reconocido" indefinidamente).
+- Fotos de evidencia fotográfica: sigue pausado, pendiente de que EPM defina la política de privacidad (sección 10). Confirmado: son columnas tipo Miniatura (`Registro Fotografico PO1/PO2/DO1/DO2/FO1/FO2/AD3/AD4`), no adjuntos genéricos de SharePoint — el diseño del paso "Seleccionar" para esto queda pendiente de descubrir la forma real del dato cuando se retome.
 
 ## 8. Apéndice — Motor de puntaje EXACTO (copiado literal del HTML original)
 
@@ -521,35 +528,55 @@ resto del código que ya usa esa clase `.rojo` para "crítico" — ver `app.js`,
 `ETIQUETAS_SEMAFORO`), su valor real es naranja. No renombrar la variable ni la clase CSS, eso
 obligaría a tocar `app.js` sin necesidad; solo cambia el valor del color.
 
-## 12. Mejoras UX — ronda posterior al MVP (branch `mejoras-ux`)
+## 12. Mejoras UX — ronda posterior al MVP (branch `mejoras-ux`, FUSIONADO a `main`)
 
 **Filtro por "diligenciado por":** nuevo filtro desplegable, poblado dinámicamente con los
 valores distintos presentes en los datos ya cargados (nombre resuelto vía `funcionarios.json`
 cuando exista, valor crudo si no).
 
-**Bug del filtro de texto con `municipios`:** `municipios` en `contratos.json` es un arreglo,
-no texto plano — pendiente de diagnóstico por Claude Code antes de corregir (no se asume la
-causa sin ver el código de la función de búsqueda primero).
+**Filtro por "contratista":** nuevo filtro desplegable, poblado con los valores distintos de
+contratista presentes en `contratos.json` (vía el contrato de cada registro). Filtra ambas
+listas.
 
-**Gráficos dinámicos — decisión de arquitectura:** se agrega **Chart.js vía CDN** (una sola
-etiqueta `<script>` en `index.html`, sin build ni npm) — primera dependencia externa del
-proyecto además de las fuentes/logo. Dos gráficos, ambos reactivos a los filtros activos:
-torta de distribución por semáforo (colores de la sección 11), y línea de evolución de
-cumplimiento en el tiempo (eje X fecha, eje Y % promedio de esa fecha).
+**Bug del filtro de texto con `municipios` (RESUELTO):** no era que `municipios` fuera un
+arreglo — la función de búsqueda simplemente nunca leía ese campo. Se agregó
+`info.municipios.join(' ')` a la bolsa de texto que arma la búsqueda.
 
-**Regla nueva — ocultar registros "Sin dato" (distinta de "Incompleto", que se sigue
-mostrando siempre):** un registro con `semaforo === 'sin_dato'` (ningún ítem del checklist
-respondido) no aporta información real y se excluye de tabla, contadores y gráficos, en ambas
-listas. No se oculta en silencio: se muestra un aviso visible con el conteo, mismo patrón que
-el aviso de duplicados.
+**Unificación de nombres entre Rutinarios e Implementación:** `funcionarios.json` admite un
+campo opcional `variantes_implementacion` (arreglo de strings) por persona, para que el mismo
+funcionario con dos formatos distintos (ej. "Sergio Ochoa Jiménez" en Rutinarios vs. "Sergio
+Ochoa — Profesional C" en Implementación) aparezca una sola vez en el filtro. Resuelto para
+Sergio Ochoa y Leydi Marín; pendiente completar a mano para Julián Sánchez y otros.
 
-**Pausados por decisión del usuario, no técnica (no aparecen en el prompt de esta ronda):**
-- Fotos de evidencia: sigue pendiente la política de privacidad de EPM (sección 10). El
-  usuario decidió avanzar en diseño de todos modos más adelante, entendiendo que el
-  interruptor `MOSTRAR_FOTOS` no sustituye la decisión de privacidad — solo oculta en pantalla,
-  no impide que el archivo sea descargable del repo si llega a subirse.
-- Restricción de acceso al tablero en vivo (contraseña simple): evaluada, descartada por ahora
-  para esta ronda.
+**Gráficos dinámicos — Chart.js vía CDN:** primera dependencia externa del proyecto además de
+fuentes/logo. Torta de distribución por semáforo + línea de evolución de cumplimiento en el
+tiempo, ambos reactivos a todos los filtros activos.
+
+**Regla — ocultar registros "Sin dato" (distinta de "Incompleto", que se sigue mostrando
+siempre):** un registro con `semaforo === 'sin_dato'` se excluye de tabla, contadores y
+gráficos, con aviso visible del conteo (nunca en silencio).
+
+**Reporte en PDF:** botón "Generar reporte" que usa `window.print()` (sin librería externa de
+generación de PDF) con una hoja de estilos de impresión dedicada. Refleja los filtros activos.
+Rango de fechas ≤8 días: registros expandidos con checklist y observaciones completas. Rango
+>8 días (o sin fechas definidas): una fila resumida por registro. Los gráficos se convierten a
+imagen estática (`canvas.toDataURL()`) antes de imprimir — **hay que esperar tanto a
+`animation.onComplete` de Chart.js como al evento `load` de cada `<img>` antes de llamar a
+`window.print()`**, o las imágenes salen en blanco (dos condiciones de carrera distintas,
+ambas confirmadas y corregidas con logs instrumentados). En el reporte impreso: "Frente" se
+reemplaza por "Dirección" (más útil para un lector externo), se agrega "Contratista", los
+registros "Incompleto" se excluyen sin aviso visible en el PDF (el conteo interno se descartó
+por decisión del usuario — no aporta a quien recibe el reporte), y los saltos de página fluyen
+libremente entre registros (solo se evita partir una fila individual de datos u observaciones,
+no el registro completo).
+
+**Nota de infraestructura:** durante esta ronda, GitHub Pages se configuró temporalmente para
+publicar desde el branch `mejoras-ux` (para poder probar en la URL real antes del merge). Tras
+fusionar a `main`, se debe volver a apuntar Pages a `main` en Settings — ya se hizo.
+
+**Fotos y contraseña de acceso — quedaron fuera de esta ronda:** ver sección 10 (fotos, sigue
+pendiente la política de privacidad de EPM) y la nota de la sección 6 sobre autenticación
+(evaluada, descartada por ahora).
 
 ## 13. Convenciones acordadas
 
