@@ -280,6 +280,10 @@ table.tabla-registros tbody tr.fila-detalle td {
   font-size: 0.82rem;
   padding: 3px 0;
   border-bottom: 1px dashed #e2e6ea;
+  /* Tarea O: una sola fila "Campo: valor" nunca debe cortarse a la mitad entre dos páginas
+     al imprimir (sin efecto en pantalla, donde no hay paginación). */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 .detalle-item .etq { color: var(--color-texto-suave); }
 .detalle-item .val { font-weight: 600; }
@@ -298,6 +302,9 @@ table.tabla-registros tbody tr.fila-detalle td {
   margin-top: 6px;
   padding-top: 8px;
   border-top: 1px solid var(--color-borde);
+  /* Tarea O: el párrafo de observaciones no debe partirse a la mitad entre dos páginas. */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 .detalle-observaciones .etq { display: block; color: var(--color-texto-suave); margin-bottom: 2px; }
 
@@ -412,17 +419,21 @@ footer.pie {
   text-align: left;
 }
 .reporte-tabla-resumida th { background: #eef1f6; }
+/* Fila pequeña: evita que se corte a la mitad entre dos páginas (Tarea O), sin forzar nada
+   a nivel de toda la tabla. */
+.reporte-tabla-resumida tr { break-inside: avoid; page-break-inside: avoid; }
 
 /* Cada registro es su propia "tarjeta": borde completo + franja de color a la izquierda
    (según semáforo) + fondo tenue, para que el límite entre un registro y el siguiente sea
-   inconfundible incluso leyendo la hoja impresa rápido (Tarea K). break-inside/page-break-
-   inside "avoid" evita que un registro se corte a la mitad entre dos páginas, pero — a
-   propósito — NO hay ningún page-break-after aquí: varios registros cortos deben poder
-   compartir una misma página y fluir de forma natural; solo se salta de página cuando el
-   registro realmente no cabe completo en el espacio restante. El modelo de caja se mantiene
-   simple a propósito (sin márgenes negativos ni "sangrado") porque ese tipo de trucos de CSS
-   confunde el cálculo de paginación de Chromium y termina forzando saltos de página
-   innecesarios — la causa más probable de las hojas casi vacías reportadas. */
+   inconfundible incluso leyendo la hoja impresa rápido (Tarea K). A propósito NO se aplica
+   break-inside/page-break-inside "avoid" aquí, a nivel de todo el registro (Tarea O): un
+   registro con checklist completo puede ser casi tan alto como una página, y "avoid" a ese
+   nivel obliga a Chromium a saltar la página entera aunque sobre bastante espacio en blanco
+   apenas ese registro no cabe completo. En vez de eso, el registro puede partirse entre
+   páginas con toda naturalidad — lo único que se protege de quedar cortado a la mitad son
+   las piezas pequeñas que sí se verían mal partidas: cada fila "Campo: valor" (.detalle-item,
+   más abajo en este archivo), el párrafo de observaciones (.detalle-observaciones) y la
+   cabecera del registro (.reporte-registro-cabecera, justo debajo). */
 .reporte-registro {
   border: 1px solid var(--color-borde);
   border-left: 5px solid var(--color-texto-suave);
@@ -430,8 +441,6 @@ footer.pie {
   padding: 10px 14px;
   margin: 0 0 18px;
   background: #f8fafb;
-  break-inside: avoid-page;
-  page-break-inside: avoid;
 }
 .reporte-registro.verde { border-left-color: var(--color-verde); }
 .reporte-registro.amarillo { border-left-color: var(--color-amarillo); }
@@ -442,6 +451,10 @@ footer.pie {
   padding-bottom: 8px;
   margin-bottom: 8px;
   border-bottom: 1px solid var(--color-borde);
+  /* Tarea O: la cabecera (fecha/tipo/semáforo + contrato/dirección/puntaje) es un bloque
+     pequeño — no debe partirse entre sus dos líneas al cruzar una página. */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 .reporte-registro-titulo { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
 .reporte-registro-meta-linea { font-size: 0.82rem; color: var(--color-texto-suave); }
@@ -460,5 +473,20 @@ footer.pie {
   .reporte-impresion {
     display: block !important;
   }
+
+  /* Tarea O: CSS Grid (usado en .detalle-registro/.detalle-meta para el layout en pantalla)
+     no se fragmenta de forma confiable entre páginas al imprimir en Chromium — ante la
+     primera fila que no cabe completa, empuja TODA la cuadrícula a la página siguiente en
+     vez de partirla donde corresponde, dejando exactamente el hueco grande que se quería
+     evitar. Se cambia a flujo de bloque normal SOLO dentro del reporte impreso (no afecta
+     la vista expandida en pantalla, donde no hay paginación): cada fila queda en una sola
+     columna, apilada, y el navegador sí sabe fragmentar bloques normales entre páginas sin
+     problema — .detalle-item ya tiene break-inside:avoid, así que cada fila individual
+     sigue sin poder cortarse a la mitad. */
+  .reporte-impresion .detalle-registro,
+  .reporte-impresion .detalle-meta {
+    display: block;
+  }
+
   @page { margin: 1.5cm; }
 }

@@ -847,13 +847,16 @@
     // Implementación) NO se imprimen en el reporte — a diferencia de la tabla interactiva
     // del tablero, donde siguen y deben seguir siendo siempre visibles (sección 9). Se
     // excluyen de TODO lo que compone el reporte (resumen, barra por contrato y listado de
-    // registros) para que esos números sean consistentes entre sí; nunca en silencio: se
-    // cuentan y se avisan más abajo. Las dos imágenes de Chart.js (torta y línea) son la
-    // única excepción — son una captura del <canvas> ya dibujado en pantalla, que sigue
-    // las mismas reglas que el resto del tablero (si algún día hace falta que también
-    // excluyan "Incompleto", habría que crear instancias de Chart.js aparte solo para el
-    // reporte en vez de reusar las de pantalla).
-    const incompletosExcluidos = listaFiltrada.filter((r) => r.incompleto).length;
+    // registros) para que esos números sean consistentes entre sí. Las dos imágenes de
+    // Chart.js (torta y línea) son la única excepción — son una captura del <canvas> ya
+    // dibujado en pantalla, que sigue las mismas reglas que el resto del tablero (si algún
+    // día hace falta que también excluyan "Incompleto", habría que crear instancias de
+    // Chart.js aparte solo para el reporte en vez de reusar las de pantalla).
+    //
+    // Tarea N: la exclusión se mantiene, pero el aviso "N excluidos" ya NO se imprime — un
+    // contratista o gestor externo que recibe el PDF no necesita ver esa nota interna. El
+    // conteo sigue disponible en el tablero interactivo (ver ESTADO y el resto de avisos en
+    // pantalla); aquí simplemente no se construye ningún párrafo para el reporte.
     const lista = listaFiltrada.filter((r) => !r.incompleto);
 
     const conteos = { verde: 0, amarillo: 0, rojo: 0, sin_dato: 0 };
@@ -862,12 +865,6 @@
     const promedio = conPuntaje.length
       ? Math.round((conPuntaje.reduce((s, r) => s + r.puntaje, 0) / conPuntaje.length) * 10) / 10
       : null;
-
-    const avisoIncompletos = incompletosExcluidos > 0
-      ? `<p class="aviso-duplicados">⚠ ${incompletosExcluidos} registro(s) "Incompleto" (falta un lado del formulario en ` +
-        `Implementación) fueron excluidos de este reporte impreso. Siguen siempre visibles en la tabla del tablero — ` +
-        `no se perdieron, solo no se imprimen.</p>`
-      : '';
 
     // Los gráficos de Chart.js viven en <canvas> del tablero en pantalla, que se oculta al
     // imprimir. Se convierten a imagen (toBase64Image) para insertarlos como <img> dentro
@@ -935,7 +932,6 @@
           <p class="reporte-filtros">${escapeHtml(formatearFiltrosActivos())}</p>
         </div>
       </header>
-      ${avisoIncompletos}
       <section class="reporte-resumen">
         <h2>Resumen</h2>
         <div class="reporte-resumen-grid">
